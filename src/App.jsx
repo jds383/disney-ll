@@ -13,7 +13,7 @@ const FAMILY2 = PEOPLE.filter((p) => p.family === 2).map((p) => p.id);
 
 const PREF_SCORES = { must: 5, like: 2, neutral: 0, skip: -1 };
 const PREF_KEYS   = ["must", "like", "neutral", "skip"];
-const PREF_SHORT  = { must: "Must", like: "Like", neutral: "Neutral", skip: "Skip" };
+const PREF_SHORT  = { must: "Must Do", like: "Like To", neutral: "Neutral", skip: "Skip It" };
 
 const PARKS = [
   { id: "mk", name: "Magic Kingdom",     color: "#2C5F8A" },
