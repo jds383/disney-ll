@@ -46,7 +46,7 @@ function sortKey(name) {
   return name.replace(/^\((?:The|A|An)\)\s*/i, "").toLowerCase();
 }
 function llText(ll, illPrice) {
-  if (ll === "ill") return illPrice ? `Individual Lightning Lane · ${illPrice}` : "Individual Lightning Lane";
+  if (ll === "ill") return illPrice ? `Lightning Lane Single Pass · ${illPrice}` : "Lightning Lane Single Pass";
   if (ll === "mp1") return "Multipass Tier 1";
   if (ll === "mp2") return "Multipass Tier 2";
   return "No Lightning Lane";
@@ -630,7 +630,7 @@ function Rankings({ parkId, prefs, onRdConfirm, onLLStatus }) {
       const isConfRD = rdConfirmed === r.id;
       const isRDNom  = prefs[r.id]?.rdNom && !isConfRD;
       const showLL   = llIds.has(r.id) && !isConfRD;
-      const pill = r.ll === "ill" ? <span className="r-pill b-ill">ILL</span> : r.ll === "mp1" ? <span className="r-pill b-mp1">T1</span> : r.ll === "mp2" ? <span className="r-pill b-mp2">T2</span> : null;
+      const pill = r.ll === "ill" ? <span className="r-pill b-sp">SP</span> : r.ll === "mp1" ? <span className="r-pill b-mp1">T1</span> : r.ll === "mp2" ? <span className="r-pill b-mp2">T2</span> : null;
       return (
         <div className="r-item" key={r.id}>
           <div className="r-item-top">
@@ -649,7 +649,7 @@ function Rankings({ parkId, prefs, onRdConfirm, onLLStatus }) {
 
   const renderLL = () => {
     const allLLRides  = activeRides.filter((r) => r.ll !== "noll");
-    const allLLScored = allLLRides.map((r) => ({ ...r, score: calcScore(r.id, prefs) })).filter((r) => r.score !== 0).sort((a, b) => b.score - a.score);
+    const allLLScored = allLLRides.map((r) => ({ ...r, score: calcScore(r.id, prefs) })).sort((a, b) => b.score - a.score);
 
     const t1PreBooked = activeRides.find((r) => r.ll === "mp1" && (prefs[r.id]?.llStatus === LL_STATUS.FIRST || prefs[r.id]?.llStatus === LL_STATUS.PREBOOK));
     const t1Skipped   = activeRides.filter((r) => r.ll === "mp1").every((r) => prefs[r.id]?.llStatus === LL_STATUS.LATER || prefs[r.id]?.llStatus === LL_STATUS.DONTBOOK || prefs[r.id]?.llStatus === LL_STATUS.SECOND);
@@ -757,11 +757,13 @@ function Rankings({ parkId, prefs, onRdConfirm, onLLStatus }) {
         {(() => {
           const t2Rides = allLLScored.filter((r) => r.ll === "mp2" && !laterRoundIds.has(r.id));
           if (!t2Rides.length) return null;
-          const locked = t2Filled;
-          const sorted = sortTierGroup(t2Rides, parkId, prefs);
-          const display = locked
+          const locked   = t2Filled;
+          const sorted   = sortTierGroup(t2Rides, parkId, prefs);
+          const nonDont  = sorted.filter((r) => prefs[r.id]?.llStatus !== LL_STATUS.DONTBOOK);
+          const dontBook = sorted.filter((r) => prefs[r.id]?.llStatus === LL_STATUS.DONTBOOK);
+          const display  = locked
             ? sorted.filter((r) => prefs[r.id]?.llStatus === LL_STATUS.FIRST || prefs[r.id]?.llStatus === LL_STATUS.PREBOOK)
-            : [...sorted.filter((r) => prefs[r.id]?.llStatus !== LL_STATUS.DONTBOOK).slice(0, 4), ...sorted.filter((r) => prefs[r.id]?.llStatus === LL_STATUS.DONTBOOK)];
+            : [...nonDont, ...dontBook];
           if (!display.length) return null;
           let num = 0;
           return (
@@ -784,7 +786,7 @@ function Rankings({ parkId, prefs, onRdConfirm, onLLStatus }) {
           );
         })()}
 
-        {/* ILL */}
+        {/* Single Pass */}
         {(() => {
           const illRides = allLLScored.filter((r) => r.ll === "ill");
           if (!illRides.length) return null;
@@ -795,7 +797,7 @@ function Rankings({ parkId, prefs, onRdConfirm, onLLStatus }) {
                 const illAllMarked = illRides.every((r) => prefs[r.id]?.llStatus);
                 return (
                   <div className={`tier-lbl-row ${illAllMarked ? "complete" : "neutral"}`}>
-                    <span className="tier-lbl">Individual Lightning Lane</span>
+                    <span className="tier-lbl">Lightning Lane Single Pass</span>
                   </div>
                 );
               })()}
@@ -1156,7 +1158,7 @@ export default function App() {
         .r-name-skip .r-link { text-decoration: line-through; color: #AAA; }
         .ill-price { font-size: 9px; color: #BF360C; margin-left: 4px; font-family: 'Plus Jakarta Sans', sans-serif; }
         .r-pill { font-size: 9px; font-family: 'Plus Jakarta Sans', sans-serif; padding: 1px 5px; border-radius: 8px; font-weight: bold; flex-shrink: 0; pointer-events: none; }
-        .b-ill  { background: #FFF3E0; color: #BF360C; border: 1px solid #FFCC80; }
+        .b-sp  { background: #FFF3E0; color: #BF360C; border: 1px solid #FFCC80; }
         .b-mp1  { background: #E8F5E9; color: #1B5E20; border: 1px solid #A5D6A7; }
         .b-mp2  { background: #E3F2FD; color: #0D47A1; border: 1px solid #90CAF9; }
         .rd-tag   { background: #F1F8F4; color: #1A6B4A; border: 1px solid #A5D6A7; }
