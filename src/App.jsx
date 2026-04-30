@@ -554,6 +554,7 @@ function RankItem({ r, num, prefs, parkId, onLLStatus }) {
   const isDemoted = llStatus === LL_STATUS.DONTBOOK;
   const isRD      = r.isRD ?? false;
   const isEE      = EARLY_ENTRY.has(r.id);
+  const isFirst   = llStatus === LL_STATUS.FIRST;
   const sellout   = SELLOUT[r.id];
   const standby   = STANDBY[r.id];
   const urgStyle  = sellout ? URGENCY_COLOR[sellout.urgency] : null;
@@ -587,6 +588,11 @@ function RankItem({ r, num, prefs, parkId, onLLStatus }) {
               Av SB: ~{standby.avg} min · {standby.insight}
             </span>
           )}
+        </div>
+      )}
+      {isFirst && isEE && !isDemoted && (
+        <div className="conflict" style={{ marginTop: "6px", marginBottom: 0 }}>
+          ⚠ Available during early entry — you may be able to walk it instead of using a LL slot.
         </div>
       )}
     </div>
@@ -718,13 +724,6 @@ function Rankings({ parkId, prefs, onRdConfirm, onLLStatus }) {
         {rdConfirmed && !EARLY_ENTRY.has(rdConfirmed) && (
           <div className="conflict">⚠ Rope Drop ride is not available during early entry — you'll be competing with the full crowd at park open.</div>
         )}
-        {(() => {
-          const firstLL = activeRides.find((r) => prefs[r.id]?.llStatus === LL_STATUS.FIRST);
-          if (firstLL && EARLY_ENTRY.has(firstLL.id)) {
-            return <div className="conflict">⚠ Your Pre-Book (1st) ride is available during early entry — you may be able to walk it instead of using a LL slot.</div>;
-          }
-          return null;
-        })()}
 
         {/* Tier 1 */}
         {(() => {
