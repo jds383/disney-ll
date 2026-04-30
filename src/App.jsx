@@ -1,10 +1,6 @@
-import { useState, useCallback, useEffect } from "react";
-
-// ── Config ────────────────────────────────────────────────────────────────────
+import { useState, useCallback, useEffect, useRef } from "react";
 
 const WORKER_URL = "https://disney-ll-proxy.45-reactor-puritan.workers.dev";
-
-// ── Data ─────────────────────────────────────────────────────────────────────
 
 const PEOPLE = [
   { id: "J", family: 1 }, { id: "A", family: 1 },
@@ -21,7 +17,21 @@ const PREF_LABELS = { must: "Must Do", like: "Like To", neutral: "Neutral", skip
 const PREF_NOTION = { must: "Must Do", like: "Like To", neutral: "Neutral", skip: "Skip It" };
 const NOTION_PREF = { "Must Do": "must", "Like To": "like", "Neutral": "neutral", "Skip It": "skip" };
 
-const LL_STATUS = { FIRST: "Pre-Book (1st)", PREBOOK: "Pre-Book", LATER: "Later", DONTBOOK: "Don't Book" };
+const LL_STATUS = {
+  FIRST:    "Pre-Book (1st)",
+  PREBOOK:  "Pre-Book",
+  SECOND:   "2nd Round",
+  LATER:    "Later",
+  DONTBOOK: "Don't Book",
+};
+
+const LL_STATUS_COLORS = {
+  [LL_STATUS.FIRST]:    "#0A4A2E",
+  [LL_STATUS.PREBOOK]:  "#1A6B4A",
+  [LL_STATUS.SECOND]:   "#B8860B",
+  [LL_STATUS.LATER]:    "#6AAB7E",
+  [LL_STATUS.DONTBOOK]: "#C0392B",
+};
 
 const PARKS = [
   { id: "mk", name: "Magic Kingdom",     color: "#2C5F8A" },
@@ -42,6 +52,125 @@ function llText(ll, illPrice) {
   return "No Lightning Lane";
 }
 
+// ── Sellout & Standby Data ────────────────────────────────────────────────────
+
+const SELLOUT = {
+  mk1:   { time: "~8:09 AM",  urgency: "red"   },
+  mk10:  { time: "~8:56 AM",  urgency: "red"   },
+  mk19:  { time: "~10:20 AM", urgency: "red"   },
+  mk12b: { time: "~11:22 AM", urgency: "amber" },
+  mk2:   { time: "~12:09 PM", urgency: "amber" },
+  mk20:  { time: "~12:21 PM", urgency: "amber" },
+  mk8:   { time: "~1:00 PM",  urgency: "amber" },
+  mk11:  { time: "~4:52 PM",  urgency: "green" },
+  mk9:   { time: "~6:35 PM",  urgency: "green" },
+  mk18:  { time: "Rarely", urgency: "green" },
+  mk30:  { time: "Rarely", urgency: "green" },
+  mk7b:  { time: "Rarely", urgency: "green" },
+  mk23:  { time: "Rarely", urgency: "green" },
+  mk3:   { time: "Rarely", urgency: "green" },
+  mk6:   { time: "Rarely", urgency: "green" },
+  mk21:  { time: "Rarely", urgency: "green" },
+  mk22:  { time: "Rarely", urgency: "green" },
+  mk16:  { time: "Rarely", urgency: "green" },
+  mk4:   { time: "Rarely", urgency: "green" },
+  mk17:  { time: "Rarely", urgency: "green" },
+  ep1:   { time: "~8:17 AM",  urgency: "red"   },
+  ep2:   { time: "~8:33 AM",  urgency: "red"   },
+  ep10:  { time: "~9:47 AM",  urgency: "red"   },
+  ep11:  { time: "~9:57 AM",  urgency: "red"   },
+  ep5:   { time: "~3:23 PM",  urgency: "amber" },
+  ep3:   { time: "~6:23 PM",  urgency: "green" },
+  ep4:   { time: "Rarely", urgency: "green" },
+  ep6:   { time: "Rarely", urgency: "green" },
+  ep7:   { time: "Rarely", urgency: "green" },
+  ep8:   { time: "Rarely", urgency: "green" },
+  ep13:  { time: "Rarely", urgency: "green" },
+  ep14:  { time: "Rarely", urgency: "green" },
+  hs3:   { time: "~7:27 AM",  urgency: "red"   },
+  hs1:   { time: "~9:28 AM",  urgency: "red"   },
+  hs4:   { time: "~9:46 AM",  urgency: "red"   },
+  hs7:   { time: "~12:03 PM", urgency: "amber" },
+  hs13:  { time: "~2:16 PM",  urgency: "amber" },
+  hs11:  { time: "~2:34 PM",  urgency: "amber" },
+  hs10:  { time: "~3:18 PM",  urgency: "amber" },
+  hs8:   { time: "~4:17 PM",  urgency: "green" },
+  hs12:  { time: "~5:53 PM",  urgency: "green" },
+  hs2:   { time: "Rarely", urgency: "green" },
+  hs9:   { time: "Rarely", urgency: "green" },
+  hs7b:  { time: "Rarely", urgency: "green" },
+};
+
+const STANDBY = {
+  mk1:   { avg: 75, difficulty: "red",   insight: "RD or LL only" },
+  mk10:  { avg: 80, difficulty: "red",   insight: "RD or LL only" },
+  mk19:  { avg: 60, difficulty: "red",   insight: "<30min or >8pm" },
+  mk2:   { avg: 50, difficulty: "red",   insight: "<30min or >8pm" },
+  mk20:  { avg: 35, difficulty: "amber", insight: "<10am or >7pm" },
+  mk11:  { avg: 40, difficulty: "amber", insight: ">7pm" },
+  mk18:  { avg: 30, difficulty: "amber", insight: ">6pm" },
+  mk23:  { avg: 30, difficulty: "amber", insight: ">6pm" },
+  mk12b: { avg: 20, difficulty: "green", insight: "Walk on most times" },
+  mk8:   { avg: 20, difficulty: "green", insight: ">5pm" },
+  mk22:  { avg: 15, difficulty: "green", insight: "Walk on most times" },
+  mk30:  { avg: 15, difficulty: "green", insight: "Walk on most times" },
+  mk3:   { avg: 15, difficulty: "green", insight: "Walk on most times" },
+  mk7b:  { avg: 15, difficulty: "green", insight: "Walk on most times" },
+  mk6:   { avg: 10, difficulty: "green", insight: "Walk on anytime" },
+  mk9:   { avg: 10, difficulty: "green", insight: "Walk on anytime" },
+  mk17:  { avg: 10, difficulty: "green", insight: "Walk on anytime" },
+  mk21:  { avg: 10, difficulty: "green", insight: "Walk on anytime" },
+  mk4:   { avg: 10, difficulty: "green", insight: "Walk on anytime" },
+  mk16:  { avg: 10, difficulty: "green", insight: "Walk on anytime" },
+  ep1:   { avg: 70, difficulty: "red",   insight: "RD or LL only" },
+  ep10:  { avg: 55, difficulty: "red",   insight: "RD or >7pm" },
+  ep11:  { avg: 50, difficulty: "red",   insight: "RD or >7pm" },
+  ep2:   { avg: 40, difficulty: "amber", insight: ">7pm" },
+  ep5:   { avg: 35, difficulty: "amber", insight: "<10am or >6pm" },
+  ep3:   { avg: 20, difficulty: "green", insight: "Walk on most times" },
+  ep6:   { avg: 15, difficulty: "green", insight: "Walk on anytime" },
+  ep7:   { avg: 10, difficulty: "green", insight: "Walk on anytime" },
+  ep4:   { avg: 10, difficulty: "green", insight: "Walk on anytime" },
+  ep8:   { avg: 10, difficulty: "green", insight: "Walk on anytime" },
+  ep13:  { avg: 10, difficulty: "green", insight: "Walk on anytime" },
+  ep14:  { avg: 10, difficulty: "green", insight: "Walk on anytime" },
+  hs1:   { avg: 75, difficulty: "red",   insight: "RD or LL only" },
+  hs3:   { avg: 65, difficulty: "red",   insight: "RD or >8pm" },
+  hs4:   { avg: 40, difficulty: "amber", insight: ">7pm" },
+  hs7:   { avg: 35, difficulty: "amber", insight: ">6pm" },
+  hs11:  { avg: 30, difficulty: "amber", insight: ">6pm" },
+  hs2:   { avg: 25, difficulty: "amber", insight: "<10am or >6pm" },
+  hs10:  { avg: 20, difficulty: "green", insight: "Walk on most times" },
+  hs9:   { avg: 15, difficulty: "green", insight: "Walk on most times" },
+  hs7b:  { avg: 15, difficulty: "green", insight: "Walk on most times" },
+  hs8:   { avg: 10, difficulty: "green", insight: "Walk on anytime" },
+  hs12:  { avg: 10, difficulty: "green", insight: "Walk on anytime" },
+  hs13:  { avg: 10, difficulty: "green", insight: "Walk on anytime" },
+};
+
+const URGENCY_COLOR = {
+  red:   { bg: "#FFEBEE", color: "#B71C1C", border: "#FFCDD2" },
+  amber: { bg: "#FFF8E1", color: "#E65100", border: "#FFE082" },
+  green: { bg: "#E8F5E9", color: "#1B5E20", border: "#A5D6A7" },
+};
+const DIFF_COLOR = {
+  red:   { bg: "#FFEBEE", color: "#B71C1C", border: "#FFCDD2" },
+  amber: { bg: "#FFF8E1", color: "#E65100", border: "#FFE082" },
+  green: { bg: "#E8F5E9", color: "#1B5E20", border: "#A5D6A7" },
+};
+
+// ── Early Entry Data ──────────────────────────────────────────────────────────
+
+const EARLY_ENTRY = new Set([
+  // Magic Kingdom
+  "mk3", "mk12", "mk12b", "mk7b", "mk6", "mk2", "mk5", "mk1", "mk11",
+  "mk30", "mk8", "mk16", "mk15", "mk4", "mk14",
+  // EPCOT
+  "ep10", "ep1", "ep3", "ep11", "ep5", "ep4", "ep2", "ep7",
+  // Hollywood Studios
+  "hs7b", "hs11", "hs2", "hs6", "hs3", "hs9", "hs1", "hs7", "hs4",
+]);
+
 const RAW_RIDES = [
   { id:"hs7b", park:"hs", name:"Alien Swirling Saucers",                             type:"Ride", ll:"mp2", url:"https://disneyworld.disney.go.com/attractions/hollywood-studios/alien-swirling-saucers/" },
   { id:"mk12", park:"mk", name:"Astro Orbiter",                                       type:"Ride", ll:"noll",url:"https://disneyworld.disney.go.com/attractions/magic-kingdom/astro-orbiter/" },
@@ -51,7 +180,7 @@ const RAW_RIDES = [
   { id:"ep15", park:"ep", name:"Beauty and the Beast Sing-Along",                     type:"Show", ll:"noll",url:"https://disneyworld.disney.go.com/entertainment/epcot/beauty-and-the-beast-sing-along/" },
   { id:"mk18", park:"mk", name:"Big Thunder Mountain Railroad",                       type:"Ride", ll:"mp1", url:"https://disneyworld.disney.go.com/attractions/magic-kingdom/big-thunder-mountain-railroad/" },
   { id:"mk12b",park:"mk", name:"Buzz Lightyear's Space Ranger Spin",                  type:"Ride", ll:"mp2", url:"https://disneyworld.disney.go.com/attractions/magic-kingdom/buzz-lightyear-space-ranger-spin/" },
-  { id:"mk31", park:"mk", name:"Country Bear Musical Jamboree",                       type:"Show", ll:"noll",url:"https://disneyworld.disney.go.com/attractions/magic-kingdom/country-bear-musical-jamboree/" },
+  { id:"mk31", park:"mk", name:"Country Bear Musical Jamboree",                       type:"Show", ll:"noll",url:"https://disneyworld.disney.go.com/attractions/magic-kingdom/country-bear-jamboree/" },
   { id:"ep13", park:"ep", name:"Disney and Pixar Short Film Festival",                type:"Film", ll:"mp2", url:"https://disneyworld.disney.go.com/attractions/epcot/disney-pixar-short-film-festival/" },
   { id:"hs14", park:"hs", name:"Disney Villains: Unfairly Ever After",                type:"Show", ll:"noll",url:"https://disneyworld.disney.go.com/entertainment/hollywood-studios/disney-villains-unfairly-ever-after/" },
   { id:"mk7b", park:"mk", name:"Dumbo the Flying Elephant",                           type:"Ride", ll:"mp2", url:"https://disneyworld.disney.go.com/attractions/magic-kingdom/dumbo-the-flying-elephant/" },
@@ -66,31 +195,31 @@ const RAW_RIDES = [
   { id:"hs10", park:"hs", name:"Indiana Jones Epic Stunt Spectacular",                type:"Show", ll:"mp2", url:"https://disneyworld.disney.go.com/entertainment/hollywood-studios/indiana-jones-epic-stunt-spectacular/" },
   { id:"mk3",  park:"mk", name:"It's a Small World",                                  type:"Ride", ll:"mp2", url:"https://disneyworld.disney.go.com/attractions/magic-kingdom/its-a-small-world/" },
   { id:"ep14", park:"ep", name:"Journey into Imagination with Figment",               type:"Ride", ll:"mp2", url:"https://disneyworld.disney.go.com/attractions/epcot/journey-into-imagination-with-figment/" },
-  { id:"ep16", park:"ep", name:"Journey of Water, Inspired by Moana",                 type:"Tour", ll:"noll",url:"https://disneyworld.disney.go.com/attractions/epcot/journey-of-water-inspired-by-moana/" },
+  { id:"ep16", park:"ep", name:"Journey of Water, Inspired by Moana",                 type:"Tour", ll:"noll",url:"https://disneyworld.disney.go.com/attractions/epcot/journey-of-water/" },
   { id:"mk20", park:"mk", name:"Jungle Cruise",                                       type:"Ride", ll:"mp1", url:"https://disneyworld.disney.go.com/attractions/magic-kingdom/jungle-cruise/" },
   { id:"hs13", park:"hs", name:"The Little Mermaid - A Musical Adventure",            type:"Show", ll:"mp2", url:"https://disneyworld.disney.go.com/entertainment/hollywood-studios/little-mermaid-musical-adventure/" },
   { id:"ep6",  park:"ep", name:"Living with the Land",                                type:"Ride", ll:"mp2", url:"https://disneyworld.disney.go.com/attractions/epcot/living-with-the-land/" },
   { id:"mk6",  park:"mk", name:"Mad Tea Party",                                       type:"Ride", ll:"mp2", url:"https://disneyworld.disney.go.com/attractions/magic-kingdom/mad-tea-party/" },
   { id:"mk21", park:"mk", name:"The Magic Carpets of Aladdin",                        type:"Ride", ll:"mp2", url:"https://disneyworld.disney.go.com/attractions/magic-kingdom/magic-carpets-of-aladdin/" },
   { id:"mk8",  park:"mk", name:"The Many Adventures of Winnie the Pooh",              type:"Ride", ll:"mp2", url:"https://disneyworld.disney.go.com/attractions/magic-kingdom/many-adventures-of-winnie-the-pooh/" },
-  { id:"mk34", park:"mk", name:"Meet Ariel at Her Grotto",                            type:"Character Meet", ll:"noll",url:"https://disneyworld.disney.go.com/attractions/magic-kingdom/meet-ariel-at-her-grotto/" },
-  { id:"hs15", park:"hs", name:"Meet Ariel at Walt Disney Presents",                  type:"Character Meet", ll:"noll",url:"https://disneyworld.disney.go.com/attractions/hollywood-studios/meet-ariel-at-walt-disney-presents/" },
-  { id:"ep17", park:"ep", name:"Meet Anna and Elsa at Royal Sommerhus",               type:"Character Meet", ll:"noll",url:"https://disneyworld.disney.go.com/attractions/epcot/meet-anna-and-elsa-at-royal-sommerhus/" },
-  { id:"ep18", park:"ep", name:"Meet Beloved Disney Pals at Mickey and Friends",      type:"Character Meet", ll:"noll",url:"https://disneyworld.disney.go.com/attractions/epcot/meet-beloved-disney-pals-at-mickey-and-friends/" },
-  { id:"mk35", park:"mk", name:"Meet Cinderella and a Visiting Princess at Princess Fairytale Hall", type:"Character Meet", ll:"noll",url:"https://disneyworld.disney.go.com/attractions/magic-kingdom/princess-fairytale-hall/" },
-  { id:"hs16", park:"hs", name:"Meet Disney Stars at Red Carpet Dreams",              type:"Character Meet", ll:"noll",url:"https://disneyworld.disney.go.com/attractions/hollywood-studios/meet-disney-stars-at-red-carpet-dreams/" },
-  { id:"hs17", park:"hs", name:"Meet Edna Mode at the Edna Mode Experience",          type:"Character Meet", ll:"noll",url:"https://disneyworld.disney.go.com/attractions/hollywood-studios/meet-edna-mode/" },
-  { id:"mk36", park:"mk", name:"Meet Mickey at Town Square Theater",                  type:"Character Meet", ll:"noll",url:"https://disneyworld.disney.go.com/attractions/magic-kingdom/meet-mickey-at-town-square-theater/" },
-  { id:"hs18", park:"hs", name:"Meet Olaf at Celebrity Spotlight",                    type:"Character Meet", ll:"noll",url:"https://disneyworld.disney.go.com/attractions/hollywood-studios/meet-olaf-at-celebrity-spotlight/" },
-  { id:"mk37", park:"mk", name:"Meet Princess Tiana and a Visiting Princess at Princess Fairytale Hall", type:"Character Meet", ll:"noll",url:"https://disneyworld.disney.go.com/attractions/magic-kingdom/princess-fairytale-hall/" },
+  { id:"mk34", park:"mk", name:"Meet Ariel at Her Grotto",                            type:"Character Meet", ll:"noll",url:"https://disneyworld.disney.go.com/entertainment/magic-kingdom/character-meet-ariel-grotto-fantasyland/" },
+  { id:"hs15", park:"hs", name:"Meet Ariel at Walt Disney Presents",                  type:"Character Meet", ll:"noll",url:"https://disneyworld.disney.go.com/entertainment/hollywood-studios/character-meet-ariel-walt-disney-presents/" },
+  { id:"ep17", park:"ep", name:"Meet Anna and Elsa at Royal Sommerhus",               type:"Character Meet", ll:"noll",url:"https://disneyworld.disney.go.com/entertainment/epcot/character-meet-anna-elsa-royal-sommerhus/" },
+  { id:"ep18", park:"ep", name:"Meet Beloved Disney Pals at Mickey and Friends",      type:"Character Meet", ll:"noll",url:"https://disneyworld.disney.go.com/entertainment/epcot/character-meet-disney-pals-communicore-hall/" },
+  { id:"mk35", park:"mk", name:"Meet Cinderella and a Visiting Princess at Princess Fairytale Hall", type:"Character Meet", ll:"noll",url:"https://disneyworld.disney.go.com/entertainment/magic-kingdom/character-meet-princess-fantasyland/" },
+  { id:"hs16", park:"hs", name:"Meet Disney Stars at Red Carpet Dreams",              type:"Character Meet", ll:"noll",url:"https://disneyworld.disney.go.com/entertainment/hollywood-studios/character-meet-mickey-minnie-red-carpet/" },
+  { id:"hs17", park:"hs", name:"Meet Edna Mode at the Edna Mode Experience",          type:"Character Meet", ll:"noll",url:"https://disneyworld.disney.go.com/entertainment/hollywood-studios/character-meet-edna-mode-experience/" },
+  { id:"mk36", park:"mk", name:"Meet Mickey at Town Square Theater",                  type:"Character Meet", ll:"noll",url:"https://disneyworld.disney.go.com/entertainment/magic-kingdom/character-meet-mickey-town-square/" },
+  { id:"hs18", park:"hs", name:"Meet Olaf at Celebrity Spotlight",                    type:"Character Meet", ll:"noll",url:"https://disneyworld.disney.go.com/entertainment/hollywood-studios/character-meet-olaf-frozen/" },
+  { id:"mk37", park:"mk", name:"Meet Princess Tiana and a Visiting Princess at Princess Fairytale Hall", type:"Character Meet", ll:"noll",url:"https://disneyworld.disney.go.com/entertainment/magic-kingdom/character-meet-princess-fairytale-hall/" },
   { id:"hs11", park:"hs", name:"Mickey and Minnie's Runaway Railway",                 type:"Ride", ll:"mp1", url:"https://disneyworld.disney.go.com/attractions/hollywood-studios/mickey-minnies-runaway-railway/" },
   { id:"mk9",  park:"mk", name:"Mickey's PhilharMagic",                               type:"Show", ll:"mp2", url:"https://disneyworld.disney.go.com/attractions/magic-kingdom/mickeys-philharmagic/" },
   { id:"hs2",  park:"hs", name:"Millennium Falcon: Smugglers Run",                    type:"Ride", ll:"mp1", url:"https://disneyworld.disney.go.com/attractions/hollywood-studios/millennium-falcon-smugglers-run/" },
   { id:"ep3",  park:"ep", name:"Mission: SPACE",                                      type:"Ride", ll:"mp2", url:"https://disneyworld.disney.go.com/attractions/epcot/mission-space/" },
   { id:"mk17", park:"mk", name:"Monsters Inc. Laugh Floor",                           type:"Show", ll:"mp2", url:"https://disneyworld.disney.go.com/attractions/magic-kingdom/monsters-inc-laugh-floor/" },
   { id:"mk2",  park:"mk", name:"Peter Pan's Flight",                                  type:"Ride", ll:"mp1", url:"https://disneyworld.disney.go.com/attractions/magic-kingdom/peter-pan-flight/" },
-  { id:"mk38", park:"mk", name:"Pete's Silly Sideshow - Dumbo and Goofy",             type:"Character Meet", ll:"noll",url:"https://disneyworld.disney.go.com/attractions/magic-kingdom/petes-silly-sideshow/" },
-  { id:"mk39", park:"mk", name:"Pete's Silly Sideshow - Donald and Daisy",            type:"Character Meet", ll:"noll",url:"https://disneyworld.disney.go.com/attractions/magic-kingdom/petes-silly-sideshow/" },
+  { id:"mk38", park:"mk", name:"Pete's Silly Sideshow - Dumbo and Goofy",             type:"Character Meet", ll:"noll",url:"https://disneyworld.disney.go.com/entertainment/magic-kingdom/character-meet-goofy-donald/" },
+  { id:"mk39", park:"mk", name:"Pete's Silly Sideshow - Donald and Daisy",            type:"Character Meet", ll:"noll",url:"https://disneyworld.disney.go.com/entertainment/magic-kingdom/character-meet-minnie-daisy/" },
   { id:"mk22", park:"mk", name:"Pirates of the Caribbean",                            type:"Ride", ll:"mp2", url:"https://disneyworld.disney.go.com/attractions/magic-kingdom/pirates-of-the-caribbean/" },
   { id:"mk5",  park:"mk", name:"Prince Charming Regal Carrousel",                     type:"Ride", ll:"noll",url:"https://disneyworld.disney.go.com/attractions/magic-kingdom/prince-charming-regal-carrousel/" },
   { id:"ep11", park:"ep", name:"Remy's Ratatouille Adventure",                        type:"Ride", ll:"mp1", url:"https://disneyworld.disney.go.com/attractions/epcot/remys-ratatouille-adventure/" },
@@ -115,67 +244,10 @@ const RAW_RIDES = [
   { id:"hs7",  park:"hs", name:"The Twilight Zone Tower of Terror",                   type:"Ride", ll:"mp2", url:"https://disneyworld.disney.go.com/attractions/hollywood-studios/twilight-zone-tower-of-terror/" },
   { id:"mk4",  park:"mk", name:"Under the Sea: Journey of the Little Mermaid",        type:"Ride", ll:"mp2", url:"https://disneyworld.disney.go.com/attractions/magic-kingdom/under-the-sea-journey-of-the-little-mermaid/" },
   { id:"mk14", park:"mk", name:"Walt Disney's Carousel of Progress",                  type:"Show", ll:"noll",url:"https://disneyworld.disney.go.com/attractions/magic-kingdom/walt-disney-carousel-of-progress/" },
-  { id:"hs19", park:"hs", name:"Walt Disney Presents",                                type:"Tour", ll:"noll",url:"https://disneyworld.disney.go.com/attractions/hollywood-studios/walt-disney-presents/" },
+  { id:"ep20", park:"ep", name:"Disney Visa Character Experience",                    type:"Character Meet", ll:"noll", visa:true, hours:"1:00pm–6:30pm", location:"Disney Visa Photo Spot, World Celebration, next to Journey Into Imagination", url:"https://disneyworld.disney.go.com/entertainment/epcot/visa-card-character-experience/" },
+  { id:"hs20", park:"hs", name:"Star Wars Visa Photo Opportunity",                    type:"Character Meet", ll:"noll", visa:true, hours:"9:00am–5:00pm", location:"Between Galaxy's Edge and Toy Story Land", url:"https://disneyrewards.com/parks-and-vacations/walt-disney-world-perks/#starwarscharacterexperience" },
+  { id:"hs21", park:"hs", name:"Stitch Visa Character Experience",                    type:"Character Meet", ll:"noll", visa:true, hours:"9:00am–12:00pm", location:"Celebrity Spotlight, Echo Lake", url:"https://disneyrewards.com/parks-and-vacations/walt-disney-world-perks/#starwarscharacterexperience" },
 ];
-
-// Sellout times from Thrill Data (past month avg). Update closer to trip.
-// urgency: "red" = before noon, "amber" = afternoon, "green" = evening
-const SELLOUT = {
-  mk18:  { time: "Rarely sells out", urgency: "green" }, // Big Thunder Mountain Railroad
-  mk30:  { time: "Rarely sells out", urgency: "green" }, // The Barnstormer
-  mk7b:  { time: "Rarely sells out", urgency: "green" }, // Dumbo
-  mk23:  { time: "Rarely sells out", urgency: "green" }, // Haunted Mansion
-  mk3:   { time: "Rarely sells out", urgency: "green" }, // It's a Small World
-  mk6:   { time: "Rarely sells out", urgency: "green" }, // Mad Tea Party
-  mk21:  { time: "Rarely sells out", urgency: "green" }, // Magic Carpets of Aladdin
-  mk22:  { time: "Rarely sells out", urgency: "green" }, // Pirates of the Caribbean
-  mk16:  { time: "Rarely sells out", urgency: "green" }, // Tomorrowland Speedway
-  mk4:   { time: "Rarely sells out", urgency: "green" }, // Under the Sea
-  mk17:  { time: "Rarely sells out", urgency: "green" }, // Monsters Inc. Laugh Floor
-  // EPCOT
-  ep4:   { time: "Rarely sells out", urgency: "green" }, // Spaceship Earth
-  ep6:   { time: "Rarely sells out", urgency: "green" }, // Living with the Land
-  ep7:   { time: "Rarely sells out", urgency: "green" }, // Seas with Nemo
-  ep8:   { time: "Rarely sells out", urgency: "green" }, // Turtle Talk with Crush
-  ep13:  { time: "Rarely sells out", urgency: "green" }, // Disney and Pixar Short Film Festival
-  ep14:  { time: "Rarely sells out", urgency: "green" }, // Journey into Imagination with Figment
-  // Hollywood Studios
-  hs2:   { time: "Rarely sells out", urgency: "green" }, // Millennium Falcon
-  hs9:   { time: "Rarely sells out", urgency: "green" }, // Star Tours
-  hs7b:  { time: "Rarely sells out", urgency: "green" }, // Alien Swirling Saucers
-  // Beauty and Beast shows (mp2 but low urgency already added above)
-  mk10:  { time: "~8:56 AM",  urgency: "red"   }, // TRON
-  mk19:  { time: "~10:20 AM", urgency: "red"   }, // Tiana's Bayou Adventure
-  mk12b: { time: "~11:22 AM", urgency: "amber" }, // Buzz Lightyear
-  mk2:   { time: "~12:09 PM", urgency: "amber" }, // Peter Pan's Flight
-  mk20:  { time: "~12:21 PM", urgency: "amber" }, // Jungle Cruise
-  mk8:   { time: "~1:00 PM",  urgency: "amber" }, // Many Adventures of Winnie the Pooh
-  mk11:  { time: "~4:52 PM",  urgency: "green" }, // Space Mountain
-  mk9:   { time: "~6:35 PM",  urgency: "green" }, // Mickey's PhilharMagic
-  // EPCOT
-  ep1:   { time: "~8:17 AM",  urgency: "red"   }, // Guardians of the Galaxy
-  ep2:   { time: "~8:33 AM",  urgency: "red"   }, // Test Track
-  ep10:  { time: "~9:47 AM",  urgency: "red"   }, // Frozen Ever After
-  ep11:  { time: "~9:57 AM",  urgency: "red"   }, // Remy's Ratatouille Adventure
-  ep5:   { time: "~3:23 PM",  urgency: "amber" }, // Soarin' Around the World
-  ep3:   { time: "~6:23 PM",  urgency: "green" }, // Mission: SPACE
-  // Hollywood Studios
-  hs3:   { time: "~7:27 AM",  urgency: "red"   }, // Slinky Dog Dash
-  hs1:   { time: "~9:28 AM",  urgency: "red"   }, // Star Wars: Rise of the Resistance
-  hs4:   { time: "~9:46 AM",  urgency: "red"   }, // Toy Story Mania
-  hs7:   { time: "~12:03 PM", urgency: "amber" }, // Tower of Terror
-  hs13:  { time: "~2:16 PM",  urgency: "amber" }, // Little Mermaid
-  hs11:  { time: "~2:34 PM",  urgency: "amber" }, // Mickey & Minnie's Runaway Railway
-  hs10:  { time: "~3:18 PM",  urgency: "amber" }, // Indiana Jones
-  hs8:   { time: "~4:17 PM",  urgency: "green" }, // Beauty and the Beast
-  hs12:  { time: "~5:53 PM",  urgency: "green" }, // Frozen Sing-Along
-};
-
-const URGENCY_COLOR = {
-  red:   { bg: "#FFEBEE", color: "#B71C1C", border: "#FFCDD2" },
-  amber: { bg: "#FFF8E1", color: "#E65100", border: "#FFE082" },
-  green: { bg: "#E8F5E9", color: "#1B5E20", border: "#A5D6A7" },
-};
 
 const RIDES = RAW_RIDES
   .map((r) => ({ ...r, displayName: toDisplayName(r.name) }))
@@ -183,7 +255,7 @@ const RIDES = RAW_RIDES
 
 // ── Storage ───────────────────────────────────────────────────────────────────
 
-const LS_KEY = "dw2026-ll-v7";
+const LS_KEY = "dw2026-ll-v8";
 function loadStorage() {
   try { const r = localStorage.getItem(LS_KEY); return r ? JSON.parse(r) : {}; } catch (_) { return {}; }
 }
@@ -233,7 +305,6 @@ async function fetchAllVotes() {
       prefs[rideId].rdNom      = rdNom;
       prefs[rideId].llStatus   = llStatus;
       prefs[rideId].notes      = notes;
-      prefs[rideId].metaPageId = page.id;
       if (rdConfirmed && park) prefs[`rdc_${park}`] = rideId;
     });
   }
@@ -247,8 +318,7 @@ async function saveVoteToNotion(rideId, rideName, park, person, preference) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ rideId, rideName, park, person, preference: PREF_NOTION[preference] }),
   });
-  const data = await res.json();
-  return data.id;
+  return (await res.json()).id;
 }
 
 async function deleteVoteFromNotion(pageId) {
@@ -265,9 +335,7 @@ async function saveMetaToNotion(rideId, rideName, park, meta, rdConfirmedId) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        rideId,
-        rideName,
-        park,
+        rideId, rideName, park,
         closed:      meta.closed    ?? false,
         rdNom:       meta.rdNom     ?? false,
         rdConfirmed: rdConfirmedId === rideId,
@@ -277,9 +345,7 @@ async function saveMetaToNotion(rideId, rideName, park, meta, rdConfirmedId) {
     });
     const data = await res.json();
     if (data.object === "error") console.error("Notion meta error:", data);
-  } catch (e) {
-    console.error("Meta sync failed:", e);
-  }
+  } catch (e) { console.error("Meta sync failed:", e); }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -302,12 +368,9 @@ function scoreColorClass(s) {
 function isClosed(rideId, prefs) {
   return prefs[rideId]?.closed ?? RIDES.find((r) => r.id === rideId)?.closed ?? false;
 }
-
-// Count Pre-Book slots used for a park
 function preBookCounts(parkId, prefs, excludeRideId) {
-  const rides = RIDES.filter((r) => r.park === parkId);
   let t1 = 0, t2 = 0;
-  rides.forEach((r) => {
+  RIDES.filter((r) => r.park === parkId).forEach((r) => {
     if (r.id === excludeRideId) return;
     const s = prefs[r.id]?.llStatus;
     if (s === LL_STATUS.PREBOOK || s === LL_STATUS.FIRST) {
@@ -316,6 +379,42 @@ function preBookCounts(parkId, prefs, excludeRideId) {
     }
   });
   return { t1, t2 };
+}
+function isPreBookFull(parkId, prefs) {
+  const { t1, t2 } = preBookCounts(parkId, prefs, null);
+  const maxT2 = t1 === 0 ? 3 : 2;
+  return t1 >= 1 && t2 >= maxT2 || t2 >= 3;
+}
+
+// ── Sort group for LL ranking ─────────────────────────────────────────────────
+
+function sortTierGroup(group, parkId, prefs) {
+  const full = isPreBookFull(parkId, prefs);
+  const prebooked = (r) => prefs[r.id]?.llStatus === LL_STATUS.FIRST || prefs[r.id]?.llStatus === LL_STATUS.PREBOOK;
+  const second    = (r) => prefs[r.id]?.llStatus === LL_STATUS.SECOND;
+  const later     = (r) => prefs[r.id]?.llStatus === LL_STATUS.LATER;
+  const unset     = (r) => !prefs[r.id]?.llStatus;
+  const dontbook  = (r) => prefs[r.id]?.llStatus === LL_STATUS.DONTBOOK;
+
+  if (full) {
+    // Slots full: prebook → 2nd round → later → unset → don't book
+    return [
+      ...group.filter(prebooked),
+      ...group.filter(second),
+      ...group.filter(later),
+      ...group.filter(unset),
+      ...group.filter(dontbook),
+    ];
+  } else {
+    // Still picking: unset → prebook → 2nd round → later → don't book
+    return [
+      ...group.filter(unset),
+      ...group.filter(prebooked),
+      ...group.filter(second),
+      ...group.filter(later),
+      ...group.filter(dontbook),
+    ];
+  }
 }
 
 // ── RideCard ──────────────────────────────────────────────────────────────────
@@ -330,24 +429,22 @@ function RideCard({ ride, prefs, onPref, onNotes, onClosed, onRdNom, syncing }) 
 
   const metaParts = [
     closed ? "Closed" : llText(ride.ll, ride.illPrice),
+    EARLY_ENTRY.has(ride.id) ? "Early Entry" : null,
+    ride.visa ? "Disney Visa" : null,
     ride.type !== "Ride" ? ride.type : null,
+    ride.hours ?? null,
   ].filter(Boolean).join(" · ");
 
   const renderFamily = (members) =>
     members.map((pid) => {
-      const cur       = prefs[ride.id]?.prefs?.[pid] ?? null;
+      const cur = prefs[ride.id]?.prefs?.[pid] ?? null;
       const isSyncing = syncing[`${ride.id}_${pid}`];
       return (
         <div className="p-row" key={pid}>
           <span className="p-lbl">{pid}{isSyncing ? <span className="sync-dot">…</span> : null}</span>
           <div className="pref-btns">
             {PREF_KEYS.map((k) => (
-              <button
-                key={k}
-                className={`pb${cur === k ? ` sel-${k}` : ""}`}
-                onClick={() => onPref(ride.id, pid, k)}
-                disabled={isSyncing}
-              >
+              <button key={k} className={`pb${cur === k ? ` sel-${k}` : ""}`} onClick={() => onPref(ride.id, pid, k)} disabled={isSyncing}>
                 {PREF_LABELS[k]}
               </button>
             ))}
@@ -363,41 +460,22 @@ function RideCard({ ride, prefs, onPref, onNotes, onClosed, onRdNom, syncing }) 
           <span className="ride-name">
             <a href={ride.url} target="_blank" rel="noreferrer">{ride.displayName} ↗</a>
           </span>
-          {!closed && (
-            <span className={`score-badge ${scoreColorClass(score)}`}>
-              {score > 0 ? "+" : ""}{score}
-            </span>
-          )}
+          {!closed && <span className={`score-badge ${scoreColorClass(score)}`}>{score > 0 ? "+" : ""}{score}</span>}
         </div>
         <div className={`ride-meta${closed ? " meta-closed" : ""}`}>{metaParts}</div>
+        {ride.location && <div className="ride-location">📍 {ride.location}</div>}
         <div className="controls-row">
-          <button className="btn-sm" onClick={() => onClosed(ride.id)}>
-            {closed ? "Mark Ride Open" : "Mark Ride Closed"}
-          </button>
-          {!closed && (
-            <button className={`rd-btn${rdNom ? " on" : ""}`} onClick={() => onRdNom(ride.id)}>
-              🌅 Rope Drop Candidate
-            </button>
-          )}
+          <button className="btn-sm" onClick={() => onClosed(ride.id)}>{closed ? "Mark Ride Open" : "Mark Ride Closed"}</button>
+          {!closed && <button className={`rd-btn${rdNom ? " on" : ""}`} onClick={() => onRdNom(ride.id)}>🌅 Rope Drop Candidate</button>}
         </div>
-        {!closed && (
-          <div className="prog">
-            <div className="prog-fill" style={{ width: `${pct}%`, background: pct === 100 ? "#1A6B4A" : "#2C5F8A" }} />
-          </div>
-        )}
+        {!closed && <div className="prog"><div className="prog-fill" style={{ width: `${pct}%`, background: pct === 100 ? "#1A6B4A" : "#2C5F8A" }} /></div>}
       </div>
       <div className={`prefs${closed ? " section-closed" : ""}`}>
         <div className="fam-blk"><div className="fam-lbl">S Family</div>{renderFamily(FAMILY1)}</div>
         <div className="fam-blk"><div className="fam-lbl">M Family</div>{renderFamily(FAMILY2)}</div>
       </div>
       <div className={`notes-sec${closed ? " section-closed" : ""}`}>
-        <textarea
-          className="notes-inp"
-          placeholder="Notes..."
-          rows={2}
-          defaultValue={notes}
-          onBlur={(e) => onNotes(ride.id, e.target.value)}
-        />
+        <textarea className="notes-inp" placeholder="Notes..." rows={2} defaultValue={notes} onBlur={(e) => onNotes(ride.id, e.target.value)} />
       </div>
     </div>
   );
@@ -407,34 +485,42 @@ function RideCard({ ride, prefs, onPref, onNotes, onClosed, onRdNom, syncing }) 
 
 function LLStatusMenu({ ride, prefs, parkId, onLLStatus }) {
   const [open, setOpen] = useState(false);
+  const [openUp, setOpenUp] = useState(false);
+  const btnRef = useRef(null);
   const current = prefs[ride.id]?.llStatus ?? null;
   const { t1, t2 } = preBookCounts(parkId, prefs, ride.id);
-  const noT1Booked = t1 === 0;
-  const maxT2 = noT1Booked ? 3 : 2;
+  const maxT2 = t1 === 0 ? 3 : 2;
   const canPreBook = !((ride.ll === "mp1" && t1 >= 1) || (ride.ll === "mp2" && t2 >= maxT2));
   const isPreBookSelected = current === LL_STATUS.FIRST || current === LL_STATUS.PREBOOK;
 
   const options = [
-    { key: LL_STATUS.FIRST,    label: "Pre-Book (1st)", color: "#0A4A2E", disabled: !canPreBook && !isPreBookSelected },
-    { key: LL_STATUS.PREBOOK,  label: "Pre-Book",       color: "#1A6B4A", disabled: !canPreBook && !isPreBookSelected },
-    { key: LL_STATUS.LATER,    label: "Book Later",     color: "#6AAB7E", disabled: false },
-    { key: LL_STATUS.DONTBOOK, label: "Don't Book",     color: "#C0392B", disabled: false },
+    { key: LL_STATUS.FIRST,    label: "Pre-Book (1st)", disabled: !canPreBook && !isPreBookSelected },
+    { key: LL_STATUS.PREBOOK,  label: "Pre-Book",       disabled: !canPreBook && !isPreBookSelected },
+    { key: LL_STATUS.SECOND,   label: "2nd Round",      disabled: false },
+    { key: LL_STATUS.LATER,    label: "Book Later",     disabled: false },
+    { key: LL_STATUS.DONTBOOK, label: "Don't Book",     disabled: false },
   ];
 
-  const currentOpt = options.find((o) => o.key === current);
-  const btnStyle = current ? { background: currentOpt.color, borderColor: currentOpt.color, color: "#FFF" } : {};
+  const color = current ? LL_STATUS_COLORS[current] : null;
+  const btnStyle = color ? { background: color, borderColor: color, color: "#FFF" } : {};
+
+  const handleOpen = () => {
+    if (btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect();
+      setOpenUp(rect.bottom > window.innerHeight - 200);
+    }
+    setOpen((o) => !o);
+  };
 
   return (
     <div style={{ position: "relative", flexShrink: 0 }} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setOpen(false); }} tabIndex={-1}>
-      <button className="ll-menu-btn" style={btnStyle} onClick={() => setOpen((o) => !o)}>
-        {current ? currentOpt.label : "— Set LL"} ▾
+      <button ref={btnRef} className="ll-menu-btn" style={btnStyle} onClick={handleOpen}>
+        {current ?? "— Set LL"} ▾
       </button>
       {open && (
-        <div className="ll-menu-popup">
-          {options.map(({ key, label, color, disabled }) => (
-            <div
-              key={key}
-              className={`ll-menu-item${disabled ? " ll-menu-disabled" : ""}${current === key ? " ll-menu-active" : ""}`}
+        <div className="ll-menu-popup" style={openUp ? { bottom: 28, top: "auto" } : { top: 28 }}>
+          {options.map(({ key, label, disabled }) => (
+            <div key={key} className={`ll-menu-item${disabled ? " ll-menu-disabled" : ""}${current === key ? " ll-menu-active" : ""}`}
               onClick={() => {
                 if (disabled) return;
                 if (key === LL_STATUS.FIRST) {
@@ -443,9 +529,8 @@ function LLStatusMenu({ ride, prefs, parkId, onLLStatus }) {
                 }
                 onLLStatus(ride.id, current === key ? null : key);
                 setOpen(false);
-              }}
-            >
-              <span className="ll-menu-dot" style={{ background: color }} />
+              }}>
+              <span className="ll-menu-dot" style={{ background: LL_STATUS_COLORS[key] }} />
               {label}
               {current === key && <span className="ll-menu-check">✓</span>}
             </div>
@@ -462,172 +547,415 @@ function LLStatusMenu({ ride, prefs, parkId, onLLStatus }) {
   );
 }
 
-// ── Rankings ──────────────────────────────────────────────────────────────────
+// ── Rank Item ─────────────────────────────────────────────────────────────────
 
-function Rankings({ parkId, prefs, onRdConfirm, onLLStatus }) {
-  const [open, setOpen] = useState(true);
-  const [mode, setMode] = useState("overall");
-
-  const park        = PARKS.find((p) => p.id === parkId);
-  const rides       = RIDES.filter((r) => r.park === parkId);
-  const activeRides = rides.filter((r) => !isClosed(r.id, prefs));
-  const allVoted    = activeRides.length > 0 && activeRides.every((r) => totalVotes(r.id, prefs) === 9);
-
-  const scored = activeRides
-    .map((r) => ({ ...r, score: calcScore(r.id, prefs) }))
-    .filter((r) => r.score !== 0)
-    .sort((a, b) => b.score - a.score);
-
-  if (scored.length === 0) return null;
-
-  const rdConfirmed  = prefs[`rdc_${parkId}`] ?? null;
-  const rdNominees   = activeRides.filter((r) => prefs[r.id]?.rdNom);
-  const multiPending = rdNominees.length > 1 && !rdConfirmed;
-
-  const tier1Conflict = activeRides.filter(
-    (r) => r.ll === "mp1" && r.id !== rdConfirmed && PEOPLE.some((p) => prefs[r.id]?.prefs?.[p.id] === "must")
-  );
-
-  const renderOverall = () => {
-    const nonSkipped = activeRides.filter((r) => prefs[r.id]?.llStatus !== LL_STATUS.DONTBOOK && prefs[r.id]?.llStatus !== LL_STATUS.LATER && r.id !== rdConfirmed);
-    const topT1 = nonSkipped.filter((r) => r.ll === "mp1").map((r) => ({ ...r, score: calcScore(r.id, prefs) })).sort((a, b) => b.score - a.score)[0];
-    const topT2 = nonSkipped.filter((r) => r.ll === "mp2").map((r) => ({ ...r, score: calcScore(r.id, prefs) })).sort((a, b) => b.score - a.score).slice(0, 2);
-    const illRides = nonSkipped.filter((r) => r.ll === "ill");
-    const llIndicatorIds = new Set([...(topT1 ? [topT1.id] : []), ...topT2.map((r) => r.id), ...illRides.map((r) => r.id)]);
-
-    return scored.slice(0, 10).map((r, i) => {
-      const isConfRD = rdConfirmed === r.id;
-      const isRDNom  = prefs[r.id]?.rdNom && !isConfRD;
-      const showLL   = llIndicatorIds.has(r.id) && !isConfRD;
-      const pill =
-        r.ll === "ill" ? <span className="r-pill b-ill">ILL</span> :
-        r.ll === "mp1" ? <span className="r-pill b-mp1">T1</span>  :
-        r.ll === "mp2" ? <span className="r-pill b-mp2">T2</span>  : null;
-      return (
-        <div className="r-item" key={r.id}>
-          <span className="r-num">{i + 1}</span>
-          <span className={`score-badge ${scoreColorClass(r.score)}`} style={{marginRight:'2px'}}>{r.score > 0 ? "+" : ""}{r.score}</span>
-          <span className="r-name">{r.displayName}</span>
-          {isConfRD && <span className="r-pill rd-tag">RD ✓</span>}
-          {isRDNom  && <span className="r-pill rd-tag">RD?</span>}
-          {showLL && pill}
-          {showLL && <span className="r-pill ll-tag">Book LL</span>}
-        </div>
-      );
-    });
-  };
-
-  const renderRankItem = (r, num) => {
-    const llStatus  = prefs[r.id]?.llStatus ?? null;
-    const isDemoted = llStatus === LL_STATUS.DONTBOOK || llStatus === LL_STATUS.LATER;
-    const sellout   = SELLOUT[r.id];
-    const urgStyle  = sellout ? URGENCY_COLOR[sellout.urgency] : null;
-    return (
-      <div className={`r-item${isDemoted ? " r-skipped" : ""}`} key={r.id}>
-        <span className="r-num">{isDemoted ? "—" : num}</span>
-        <span className={`score-badge ${scoreColorClass(r.score)}`} style={isDemoted?{opacity:0.4}:{}}>{r.score > 0 ? "+" : ""}{r.score}</span>
-        <span className={`r-name${isDemoted ? " r-name-skip" : ""}`}>
-          {r.displayName}
-          {r.illPrice ? <span className="ill-price">({r.illPrice})</span> : null}
-          {sellout && !isDemoted && (
-            <span className="sellout-badge" style={{background:urgStyle.bg, color:urgStyle.color, border:`1px solid ${urgStyle.border}`}}>
-              {sellout.urgency !== "green" ? "⏱ " : ""}{sellout.time}
-            </span>
-          )}
-        </span>
-        <LLStatusMenu ride={r} prefs={prefs} parkId={parkId} onLLStatus={onLLStatus} />
-      </div>
-    );
-  };
-
-  const renderLL = () => {
-    const llRides  = activeRides.filter((r) => r.ll !== "noll" && r.id !== rdConfirmed);
-    const llScored = llRides.map((r) => ({ ...r, score: calcScore(r.id, prefs) })).filter((r) => r.score !== 0).sort((a, b) => b.score - a.score);
-
-    return (
-      <>
-        {rdNominees.length > 0 && (
-          <div>
-            <div className="tier-lbl">Rope Drop Candidate</div>
-            {multiPending && <div className="rd-pend">Select one to confirm your Rope Drop ride ↓</div>}
-            {(rdConfirmed ? rdNominees.filter((r) => r.id === rdConfirmed) : rdNominees).map((r) => {
-              const isConf = rdConfirmed === r.id;
-              const s = calcScore(r.id, prefs);
-              return (
-                <div className="r-item" key={r.id}>
-                  <div className={`rd-chk${isConf ? " on" : ""}`} onClick={() => onRdConfirm(parkId, r.id)}>{isConf ? "✓" : ""}</div>
-                  <span className="r-name">{r.displayName}</span>
-                  <span className={`score-badge ${scoreColorClass(s)}`}>{s > 0 ? "+" : ""}{s}</span>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {tier1Conflict.length > 1 && (
-          <div className="conflict">⚠ Only one Tier 1 can be Pre-Booked.</div>
-        )}
-
-        {[
-          { key: "mp1", label: "Multipass Tier 1" },
-          { key: "mp2", label: "Multipass Tier 2" },
-          { key: "ill", label: "Individual Lightning Lane" },
-        ].map(({ key, label }) => {
-          const group = key === "ill"
-            ? activeRides.filter((r) => r.ll === "ill" && r.id !== rdConfirmed).map((r) => ({ ...r, score: calcScore(r.id, prefs) })).filter((r) => r.score !== 0).sort((a, b) => b.score - a.score)
-            : llScored.filter((r) => r.ll === key);
-
-          const undecided = group.filter((r) => !prefs[r.id]?.llStatus);
-          const prebooked = group.filter((r) => prefs[r.id]?.llStatus === LL_STATUS.PREBOOK || prefs[r.id]?.llStatus === LL_STATUS.FIRST);
-          const demoted   = group.filter((r) => prefs[r.id]?.llStatus === LL_STATUS.LATER || prefs[r.id]?.llStatus === LL_STATUS.DONTBOOK);
-          const topSlots  = [...undecided, ...prebooked].slice(0, key === "ill" ? 10 : 4);
-          const display   = [...topSlots, ...demoted];
-          if (!display.length) return null;
-
-          let activeNum = 0;
-          return (
-            <div key={key}>
-              <div className="tier-lbl">{label}</div>
-              {display.map((r) => {
-                const status  = prefs[r.id]?.llStatus ?? null;
-                const isDemoted = status === LL_STATUS.LATER || status === LL_STATUS.DONTBOOK;
-                if (!isDemoted) activeNum++;
-                return renderRankItem(r, isDemoted ? null : activeNum);
-              })}
-            </div>
-          );
-        })}
-      </>
-    );
-  };
+function RankItem({ r, num, prefs, parkId, onLLStatus }) {
+  const llStatus  = prefs[r.id]?.llStatus ?? null;
+  const isDemoted = llStatus === LL_STATUS.DONTBOOK;
+  const isRD      = r.isRD ?? false;
+  const isEE      = EARLY_ENTRY.has(r.id);
+  const sellout   = SELLOUT[r.id];
+  const standby   = STANDBY[r.id];
+  const urgStyle  = sellout ? URGENCY_COLOR[sellout.urgency] : null;
+  const diffStyle = standby ? DIFF_COLOR[standby.difficulty] : null;
 
   return (
-    <div className="rank-sec">
-      <div className="rank-hdr" onClick={() => setOpen((o) => !o)}>
-        <span className="rank-title">Priority Ranking{allVoted ? " — All Voted" : ""}</span>
-        <span className={`chev${open ? " open" : ""}`}>▼</span>
+    <div className={`r-item${isDemoted ? " r-skipped" : ""}`}>
+      <div className="r-item-top">
+        <span className="r-num">{isDemoted ? "—" : num}</span>
+        <span className={`score-badge ${scoreColorClass(r.score)}`} style={isDemoted ? { opacity: 0.4 } : {}}>
+          {r.score > 0 ? "+" : ""}{r.score}
+        </span>
+        <span className={`r-name${isDemoted ? " r-name-skip" : ""}`}>
+          <a href={r.url} target="_blank" rel="noreferrer" className="r-link">{r.displayName} ↗</a>
+          {r.illPrice && !isDemoted && <span className="ill-price">({r.illPrice})</span>}
+        </span>
+        {isRD && <span className="r-pill rd-tag">RD ✓</span>}
+        {isEE && !isDemoted && <span className="r-pill ee-tag">EE</span>}
+        {r.visa && !isDemoted && <span className="r-pill visa-tag">Visa</span>}
+        <LLStatusMenu ride={r} prefs={prefs} parkId={parkId} onLLStatus={onLLStatus} />
       </div>
-      {open && (
-        <div>
-          <div className="tog-row">
-            <button className={`tog-btn${mode === "overall" ? " on" : ""}`} style={mode === "overall" ? { background: park.color, color: "#FFF", borderColor: park.color } : {}} onClick={() => setMode("overall")}>Overall Top 10</button>
-            <button className={`tog-btn${mode === "ll" ? " on" : ""}`} style={mode === "ll" ? { background: park.color, color: "#FFF", borderColor: park.color } : {}} onClick={() => setMode("ll")}>LL Ranking</button>
-          </div>
-          <div className="rank-body">{mode === "overall" ? renderOverall() : renderLL()}</div>
+      {!isDemoted && (sellout || standby) && (
+        <div className="r-item-meta">
+          {sellout && (
+            <span className="r-meta-badge r-meta-badge-ll" style={{ background: urgStyle.bg, color: urgStyle.color, border: `1px solid ${urgStyle.border}` }}>
+              LL Sell Out: {sellout.time}
+            </span>
+          )}
+          {standby && (
+            <span className="r-meta-badge r-meta-badge-sb" style={{ background: diffStyle.bg, color: diffStyle.color, border: `1px solid ${diffStyle.border}` }}>
+              Av SB: ~{standby.avg} min · {standby.insight}
+            </span>
+          )}
         </div>
       )}
     </div>
   );
 }
 
+// ── Rankings ──────────────────────────────────────────────────────────────────
+
+function Rankings({ parkId, prefs, onRdConfirm, onLLStatus }) {
+  const park        = PARKS.find((p) => p.id === parkId);
+  const rides       = RIDES.filter((r) => r.park === parkId);
+  const activeRides = rides.filter((r) => !isClosed(r.id, prefs));
+  const scored      = activeRides.map((r) => ({ ...r, score: calcScore(r.id, prefs) })).filter((r) => r.score !== 0).sort((a, b) => b.score - a.score);
+
+  if (scored.length === 0) return null;
+
+  const anyLLSelected = rides.some((r) => prefs[r.id]?.llStatus);
+  const [overallOpen, setOverallOpen]     = useState(!anyLLSelected);
+  const [llOpen, setLlOpen]               = useState(anyLLSelected);
+
+
+  const rdConfirmed  = prefs[`rdc_${parkId}`] ?? null;
+  const rdNominees   = activeRides.filter((r) => prefs[r.id]?.rdNom);
+  const multiPending = rdNominees.length > 1 && !rdConfirmed;
+  const tier1Conflict = activeRides.filter((r) => r.ll === "mp1" && r.id !== rdConfirmed && PEOPLE.some((p) => prefs[r.id]?.prefs?.[p.id] === "must"));
+
+  const renderOverall = () => {
+    const nonDecided = activeRides.filter((r) => prefs[r.id]?.llStatus !== LL_STATUS.DONTBOOK && prefs[r.id]?.llStatus !== LL_STATUS.LATER && r.id !== rdConfirmed);
+    const topT1  = nonDecided.filter((r) => r.ll === "mp1").map((r) => ({ ...r, score: calcScore(r.id, prefs) })).sort((a, b) => b.score - a.score)[0];
+    const topT2  = nonDecided.filter((r) => r.ll === "mp2").map((r) => ({ ...r, score: calcScore(r.id, prefs) })).sort((a, b) => b.score - a.score).slice(0, 2);
+    const illR   = nonDecided.filter((r) => r.ll === "ill");
+    const llIds  = new Set([...(topT1 ? [topT1.id] : []), ...topT2.map((r) => r.id), ...illR.map((r) => r.id)]);
+
+    return scored.slice(0, 10).map((r, i) => {
+      const isConfRD = rdConfirmed === r.id;
+      const isRDNom  = prefs[r.id]?.rdNom && !isConfRD;
+      const showLL   = llIds.has(r.id) && !isConfRD;
+      const pill = r.ll === "ill" ? <span className="r-pill b-ill">ILL</span> : r.ll === "mp1" ? <span className="r-pill b-mp1">T1</span> : r.ll === "mp2" ? <span className="r-pill b-mp2">T2</span> : null;
+      return (
+        <div className="r-item" key={r.id}>
+          <div className="r-item-top">
+            <span className="r-num">{i + 1}</span>
+            <span className={`score-badge ${scoreColorClass(r.score)}`}>{r.score > 0 ? "+" : ""}{r.score}</span>
+            <span className="r-name"><a href={r.url} target="_blank" rel="noreferrer" className="r-link">{r.displayName} ↗</a></span>
+            {isConfRD && <span className="r-pill rd-tag">RD ✓</span>}
+            {isRDNom  && <span className="r-pill rd-tag">RD?</span>}
+            {showLL && pill}
+            {showLL && <span className="r-pill ll-tag">Book LL</span>}
+          </div>
+        </div>
+      );
+    });
+  };
+
+  const renderLL = () => {
+    const allLLRides  = activeRides.filter((r) => r.ll !== "noll");
+    const allLLScored = allLLRides.map((r) => ({ ...r, score: calcScore(r.id, prefs) })).filter((r) => r.score !== 0).sort((a, b) => b.score - a.score);
+
+    const t1PreBooked = activeRides.find((r) => r.ll === "mp1" && (prefs[r.id]?.llStatus === LL_STATUS.FIRST || prefs[r.id]?.llStatus === LL_STATUS.PREBOOK));
+    const t1Skipped   = activeRides.filter((r) => r.ll === "mp1").every((r) => prefs[r.id]?.llStatus === LL_STATUS.LATER || prefs[r.id]?.llStatus === LL_STATUS.DONTBOOK || prefs[r.id]?.llStatus === LL_STATUS.SECOND);
+    const { t1: t1Count, t2: t2Count } = preBookCounts(parkId, prefs, null);
+    const maxT2 = t1Count === 0 ? 3 : 2;
+    const t2Filled = t2Count >= maxT2;
+
+    // Build set of ride IDs that get pushed to Later Round Options
+    const laterRoundIds = new Set();
+    if (t1PreBooked) {
+      activeRides.filter((r) => r.ll === "mp1" && r.id !== t1PreBooked.id).forEach((r) => laterRoundIds.add(r.id));
+    }
+    if (t2Filled) {
+      activeRides.filter((r) => r.ll === "mp2" && prefs[r.id]?.llStatus !== LL_STATUS.FIRST && prefs[r.id]?.llStatus !== LL_STATUS.PREBOOK).forEach((r) => laterRoundIds.add(r.id));
+    }
+
+    const rdHeader = () => {
+      if (rdConfirmed) { const ride = activeRides.find((r) => r.id === rdConfirmed); return `Rope Drop — ${ride?.displayName ?? ""} ✓`; }
+      if (rdNominees.length > 0) return "Rope Drop — Select One ↓";
+      return "Rope Drop — None Nominated";
+    };
+    const t1Header = () => {
+      if (t1PreBooked) return `Tier 1 — ${t1PreBooked.displayName} ✓`;
+      if (t1Skipped)   return `Tier 1 — Skipping · ${maxT2} T2 slots available`;
+      return "Tier 1 — Select up to 1 ↓";
+    };
+    const t2Header = () => {
+      if (t2Filled) return `Tier 2 — ${t2Count} of ${maxT2} slots filled ✓`;
+      return `Tier 2 — ${t2Count} of ${maxT2} slots filled`;
+    };
+
+    const renderRideItem = (r, num) => {
+      const isRD = r.id === rdConfirmed;
+      return (
+        <div key={r.id} style={{ position: "relative" }}>
+          <RankItem r={{ ...r, isRD }} num={num} prefs={prefs} parkId={parkId} onLLStatus={onLLStatus} />
+        </div>
+      );
+    };
+
+    const laterRound = allLLScored.filter((r) => laterRoundIds.has(r.id));
+
+    return (
+      <>
+        {/* Rope Drop */}
+        {rdNominees.length > 0 && (
+          <div>
+            <div className={`tier-lbl-row ${rdConfirmed ? "complete" : "incomplete"}`}>
+              <span className="tier-lbl">{rdHeader()}</span>
+            </div>
+            <>
+              {multiPending && <div className="rd-pend">Select a Rope Drop Ride</div>}
+              {(rdConfirmed ? rdNominees.filter((r) => r.id === rdConfirmed) : rdNominees).map((r) => {
+                const isConf = rdConfirmed === r.id;
+                const s = calcScore(r.id, prefs);
+                return (
+                  <div className="r-item" key={r.id}>
+                    <div className="r-item-top">
+                      <span className="r-num">·</span>
+                      <span className={`score-badge ${scoreColorClass(s)}`}>{s > 0 ? "+" : ""}{s}</span>
+                      <span className="r-name"><a href={r.url} target="_blank" rel="noreferrer" className="r-link">{r.displayName} ↗</a></span>
+                      <div className={`rd-chk${isConf ? " on" : ""}`} onClick={() => onRdConfirm(parkId, r.id)}>{isConf ? "✓" : ""}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </>
+          </div>
+        )}
+
+        {/* Warnings */}
+        {rdConfirmed && !EARLY_ENTRY.has(rdConfirmed) && (
+          <div className="conflict">⚠ Rope Drop ride is not available during early entry — you'll be competing with the full crowd at park open.</div>
+        )}
+        {(() => {
+          const firstLL = activeRides.find((r) => prefs[r.id]?.llStatus === LL_STATUS.FIRST);
+          if (firstLL && EARLY_ENTRY.has(firstLL.id)) {
+            return <div className="conflict">⚠ Your Pre-Book (1st) ride is available during early entry — you may be able to walk it instead of using a LL slot.</div>;
+          }
+          return null;
+        })()}
+
+        {/* Tier 1 */}
+        {(() => {
+          const t1Rides = allLLScored.filter((r) => r.ll === "mp1" && !laterRoundIds.has(r.id));
+          if (!t1Rides.length) return null;
+          const isSelecting = !t1PreBooked && !t1Skipped;
+          const locked = !!t1PreBooked;
+          const sorted  = sortTierGroup(t1Rides, parkId, prefs);
+          const display = locked
+            ? t1Rides.filter((r) => r.id === t1PreBooked.id)
+            : sorted;
+          let num = 0;
+          return (
+            <div>
+              {(() => {
+                const t1AllMarked = t1Rides.every((r) => prefs[r.id]?.llStatus);
+                const t1Complete  = !!t1PreBooked || t1AllMarked;
+                return (
+                  <div className={`tier-lbl-row ${t1Complete ? "complete" : "incomplete"}`}>
+                    <span className="tier-lbl">{t1Header()}</span>
+                  </div>
+                );
+              })()}
+              {!t1PreBooked && t1Rides.length > 1 && <div className="rd-pend">Select one Tier 1 Ride</div>}
+              {display.map((r) => { num++; return renderRideItem(r, num); })}
+            </div>
+          );
+        })()}
+
+        {/* Tier 2 */}
+        {(() => {
+          const t2Rides = allLLScored.filter((r) => r.ll === "mp2" && !laterRoundIds.has(r.id));
+          if (!t2Rides.length) return null;
+          const locked = t2Filled;
+          const sorted = sortTierGroup(t2Rides, parkId, prefs);
+          const display = locked
+            ? sorted.filter((r) => prefs[r.id]?.llStatus === LL_STATUS.FIRST || prefs[r.id]?.llStatus === LL_STATUS.PREBOOK)
+            : [...sorted.filter((r) => prefs[r.id]?.llStatus !== LL_STATUS.DONTBOOK).slice(0, 4), ...sorted.filter((r) => prefs[r.id]?.llStatus === LL_STATUS.DONTBOOK)];
+          if (!display.length) return null;
+          let num = 0;
+          return (
+            <div>
+              {(() => {
+                const t2AllMarked = t2Rides.every((r) => prefs[r.id]?.llStatus);
+                const t2Complete  = t2Filled || t2AllMarked;
+                return (
+                  <div className={`tier-lbl-row ${t2Complete ? "complete" : "incomplete"}`}>
+                    <span className="tier-lbl">{t2Header()}</span>
+                  </div>
+                );
+              })()}
+              {display.map((r) => {
+                const isDemoted = prefs[r.id]?.llStatus === LL_STATUS.DONTBOOK;
+                if (!isDemoted) num++;
+                return renderRideItem(r, isDemoted ? null : num);
+              })}
+            </div>
+          );
+        })()}
+
+        {/* ILL */}
+        {(() => {
+          const illRides = allLLScored.filter((r) => r.ll === "ill");
+          if (!illRides.length) return null;
+          let num = 0;
+          return (
+            <div>
+              {(() => {
+                const illAllMarked = illRides.every((r) => prefs[r.id]?.llStatus);
+                return (
+                  <div className={`tier-lbl-row ${illAllMarked ? "complete" : "neutral"}`}>
+                    <span className="tier-lbl">Individual Lightning Lane</span>
+                  </div>
+                );
+              })()}
+              {illRides.map((r) => { num++; return renderRideItem(r, num); })}
+            </div>
+          );
+        })()}
+
+        {/* Later Round Options */}
+        {laterRound.length > 0 && (
+          <div>
+            <div className="tier-lbl-row neutral">
+              <span className="tier-lbl">Later Round Options</span>
+            </div>
+            {(() => { let num = 0; return laterRound.map((r) => { num++; return renderRideItem(r, num); }); })()}
+          </div>
+        )}
+      </>
+    );
+  };
+
+  return (
+    <>
+      <div className="rank-sec">
+        <div className="rank-hdr" onClick={() => setOverallOpen((o) => !o)}>
+          <span className="rank-title">Overall Top 10</span>
+          <span className={`chev${overallOpen ? " open" : ""}`}>▼</span>
+        </div>
+        {overallOpen && <div className="rank-body">{renderOverall()}</div>}
+      </div>
+      <div className="rank-sec">
+        <div className="rank-hdr" onClick={() => setLlOpen((o) => !o)}>
+          <span className="rank-title">Lightning Lane Plan</span>
+          <span className={`chev${llOpen ? " open" : ""}`}>▼</span>
+        </div>
+        {llOpen && <div className="rank-body">{renderLL()}</div>}
+      </div>
+    </>
+  );
+}
+
+// ── Summary ───────────────────────────────────────────────────────────────────
+
+function Summary({ prefs }) {
+  const [collapsed, setCollapsed] = useState({});
+
+  return (
+    <div>
+      {PARKS.map((park) => {
+        const rides    = RIDES.filter((r) => r.park === park.id);
+        const rdConf   = prefs[`rdc_${park.id}`] ?? null;
+        const rdRide   = rdConf ? rides.find((r) => r.id === rdConf) : null;
+        const firstLL  = rides.find((r) => prefs[r.id]?.llStatus === LL_STATUS.FIRST);
+        const preBooks = rides.filter((r) => prefs[r.id]?.llStatus === LL_STATUS.PREBOOK)
+          .map((r) => ({ ...r, score: calcScore(r.id, prefs) }))
+          .sort((a, b) => b.score - a.score);
+        const secondRound = rides.filter((r) => prefs[r.id]?.llStatus === LL_STATUS.SECOND)
+          .map((r) => ({ ...r, score: calcScore(r.id, prefs) }))
+          .sort((a, b) => b.score - a.score);
+
+        const hasAnything = rdRide || firstLL || preBooks.length > 0 || secondRound.length > 0;
+        const isCollapsed = collapsed[park.id];
+
+        const SummaryRideItem = ({ badge, badgeBg, badgeColor, badgeBorder, r }) => {
+          const sellout = SELLOUT[r.id];
+          const standby = STANDBY[r.id];
+          const urgStyle  = sellout ? URGENCY_COLOR[sellout.urgency] : null;
+          const diffStyle = standby ? DIFF_COLOR[standby.difficulty] : null;
+          return (
+            <div className="summary-item">
+              <div className="summary-item-top">
+                <span className="summary-badge" style={{ background: badgeBg, color: badgeColor, border: `1px solid ${badgeBorder}` }}>{badge}</span>
+                <div className="summary-ride-info">
+                  <a href={r.url} target="_blank" rel="noreferrer" className="summary-ride-name">{r.displayName} ↗</a>
+                  <span className="summary-ll-type">{llText(r.ll, r.illPrice)}</span>
+                </div>
+              </div>
+              {(sellout || standby) && (
+                <div className="summary-meta-row">
+                  {sellout && <span className="r-meta-badge r-meta-badge-ll" style={{ background: urgStyle.bg, color: urgStyle.color, border: `1px solid ${urgStyle.border}` }}>LL Sell Out: {sellout.time}</span>}
+                  {standby && <span className="r-meta-badge r-meta-badge-sb" style={{ background: diffStyle.bg, color: diffStyle.color, border: `1px solid ${diffStyle.border}` }}>Av SB: ~{standby.avg} min · {standby.insight}</span>}
+                </div>
+              )}
+            </div>
+          );
+        };
+
+        return (
+          <div className="summary-park" key={park.id}>
+            <div className="summary-park-hdr" onClick={() => setCollapsed((c) => ({ ...c, [park.id]: !c[park.id] }))}>
+              <span className="summary-park-name" style={{ color: park.color }}>{park.name}</span>
+              <span className={`chev${!isCollapsed ? " open" : ""}`}>▼</span>
+            </div>
+            {!isCollapsed && (
+              <div className="summary-body">
+                {!hasAnything && <div className="summary-empty">No selections yet</div>}
+                {rdRide && <SummaryRideItem badge="🏃 Rope Drop" badgeBg="#F1F8F4" badgeColor="#1A6B4A" badgeBorder="#A5D6A7" r={rdRide} />}
+                {firstLL && <SummaryRideItem badge="1st LL" badgeBg="#E8F5E9" badgeColor="#0A4A2E" badgeBorder="#A5D6A7" r={firstLL} />}
+                {preBooks.map((r, i) => <SummaryRideItem key={r.id} badge={`Pre-Book ${i + 1}`} badgeBg="#F1F8F4" badgeColor="#1A6B4A" badgeBorder="#A5D6A7" r={r} />)}
+                {secondRound.length > 0 && (
+                  <>
+                    <div className="summary-section-lbl">2nd Round — book after first tap-in</div>
+                    {secondRound.map((r, i) => <SummaryRideItem key={r.id} badge={`2nd Round ${i + 1}`} badgeBg="#FFFDE7" badgeColor="#B8860B" badgeBorder="#FFE082" r={r} />)}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── ParkRides ─────────────────────────────────────────────────────────────────
+
+function ParkRides({ parkId, prefs, onPref, onNotes, onClosed, onRdNom, syncing, onRdConfirm, onLLStatus }) {
+  const [ratedOpen, setRatedOpen] = useState(false);
+
+  const parkRides = RIDES.filter((r) => r.park === parkId);
+
+  const needsRating = parkRides.filter((r) =>
+    !isClosed(r.id, prefs) && totalVotes(r.id, prefs) < 9
+  );
+  const ratedAndClosed = parkRides.filter((r) =>
+    isClosed(r.id, prefs) || totalVotes(r.id, prefs) === 9
+  );
+
+  const cardProps = { prefs, onPref, onNotes, onClosed, onRdNom, syncing };
+
+  return (
+    <>
+      {needsRating.map((ride) => (
+        <RideCard key={ride.id} ride={ride} {...cardProps} />
+      ))}
+      {ratedAndClosed.length > 0 && (
+        <div className="rank-sec" style={{marginTop: '0', marginBottom: '10px'}}>
+          <div className="rank-hdr" onClick={() => setRatedOpen((o) => !o)}>
+            <span className="rank-title">Rated (or Closed) Rides ({ratedAndClosed.length})</span>
+            <span className={`chev${ratedOpen ? " open" : ""}`}>▼</span>
+          </div>
+          {ratedOpen && ratedAndClosed.map((ride) => (
+            <RideCard key={ride.id} ride={ride} {...cardProps} />
+          ))}
+        </div>
+      )}
+      <Rankings parkId={parkId} prefs={prefs} onRdConfirm={onRdConfirm} onLLStatus={onLLStatus} />
+    </>
+  );
+}
+
 // ── App ───────────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const [activePark, setActivePark] = useState("mk");
-  const [prefs, setPrefs]           = useState(() => loadStorage());
-  const [loading, setLoading]       = useState(true);
-  const [syncing, setSyncing]       = useState({});
-  const [syncError, setSyncError]   = useState(null);
+  const [activeTab, setActiveTab] = useState("mk");
+  const [prefs, setPrefs]         = useState(() => loadStorage());
+  const [loading, setLoading]     = useState(true);
+  const [syncing, setSyncing]     = useState({});
+  const [syncError, setSyncError] = useState(null);
 
   useEffect(() => {
     fetchAllVotes()
@@ -636,9 +964,7 @@ export default function App() {
           const merged = { ...local };
           Object.entries(notionData).forEach(([key, data]) => {
             if (key.startsWith("rdc_")) { merged[key] = data; }
-            else {
-              merged[key] = { ...local[key], ...data, prefs: { ...(local[key]?.prefs ?? {}), ...(data.prefs ?? {}) }, pageIds: { ...(local[key]?.pageIds ?? {}), ...(data.pageIds ?? {}) } };
-            }
+            else { merged[key] = { ...local[key], ...data, prefs: { ...(local[key]?.prefs ?? {}), ...(data.prefs ?? {}) }, pageIds: { ...(local[key]?.pageIds ?? {}), ...(data.pageIds ?? {}) } }; }
           });
           saveStorage(merged);
           return merged;
@@ -716,8 +1042,8 @@ export default function App() {
       const cur  = prev[`rdc_${parkId}`] ?? null;
       const next = { ...prev, [`rdc_${parkId}`]: cur === rideId ? null : rideId };
       saveStorage(next);
-      const nominees = RIDES.filter((r) => r.park === parkId && prev[r.id]?.rdNom);
-      nominees.forEach((r) => saveMetaToNotion(r.id, r.displayName, parkId, next[r.id] ?? {}, next[`rdc_${parkId}`]));
+      RIDES.filter((r) => r.park === parkId && prev[r.id]?.rdNom)
+        .forEach((r) => saveMetaToNotion(r.id, r.displayName, parkId, next[r.id] ?? {}, next[`rdc_${parkId}`]));
       return next;
     });
   }, []);
@@ -733,25 +1059,26 @@ export default function App() {
     });
   }, []);
 
-  const parkRides = RIDES.filter((r) => r.park === activePark);
+  const TABS = [...PARKS, { id: "summary", name: "Summary", color: "#555" }];
 
   return (
     <>
       <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        body { background: #FBF7F2; font-family: Georgia, serif; }
+        body { background: #FBF7F2; font-family: 'Plus Jakarta Sans', sans-serif; }
         .app { max-width: 480px; margin: 0 auto; padding: 20px 16px 60px; }
         .header { margin-bottom: 20px; }
         .header h1 { font-size: 22px; font-weight: normal; color: #1A1A1A; letter-spacing: -0.02em; margin-bottom: 4px; }
-        .header p  { font-size: 11px; color: #AAA; font-family: monospace; letter-spacing: 0.08em; text-transform: uppercase; }
-        .sync-status  { font-size: 10px; font-family: monospace; padding: 6px 10px; border-radius: 8px; margin-bottom: 14px; }
+        .header p  { font-size: 11px; color: #AAA; font-family: 'Plus Jakarta Sans', sans-serif; letter-spacing: 0.08em; text-transform: uppercase; }
+        .sync-status  { font-size: 10px; font-family: 'Plus Jakarta Sans', sans-serif; padding: 6px 10px; border-radius: 8px; margin-bottom: 14px; }
         .sync-loading { background: #E3F2FD; color: #0D47A1; }
         .sync-error   { background: #FFF8E1; color: #E65100; }
         .park-tabs { display: flex; gap: 6px; margin-bottom: 20px; overflow-x: auto; padding-bottom: 4px; }
-        .park-tab  { flex-shrink: 0; padding: 7px 14px; border-radius: 20px; border: none; font-family: monospace; font-size: 11px; cursor: pointer; transition: all 0.15s; }
+        .park-tab  { flex-shrink: 0; padding: 7px 14px; border-radius: 20px; border: none; font-family: 'Plus Jakarta Sans', sans-serif; font-size: 11px; cursor: pointer; }
         .park-tab.active   { color: #FFF; }
         .park-tab.inactive { background: #EDE8E1; color: #1A1A1A; }
-        .ride-card { background: #FFF; border-radius: 14px; border: 1px solid #EDE8E1; margin-bottom: 10px; overflow: hidden; transition: all 0.2s; }
+        .ride-card { background: #FFF; border-radius: 14px; border: 1px solid #EDE8E1; margin-bottom: 10px; overflow: hidden; }
         .ride-card.card-closed { background: #EEECEA; border-color: #D8D4CD; }
         .ride-header { padding: 12px 16px 10px; border-bottom: 1px solid #F5F0EA; }
         .card-closed .ride-header { border-color: #D8D4CD; }
@@ -759,28 +1086,29 @@ export default function App() {
         .ride-name { font-size: 14px; color: #1A1A1A; flex: 1; line-height: 1.3; }
         .ride-name a { color: #1A1A1A; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; }
         .card-closed .ride-name a { color: #999; }
-        .ride-meta { font-size: 10px; color: #AAA; font-family: monospace; margin-bottom: 6px; }
+        .ride-meta { font-size: 10px; color: #AAA; font-family: 'Plus Jakarta Sans', sans-serif; margin-bottom: 4px; }
+        .ride-location { font-size: 10px; color: #AAA; font-family: 'Plus Jakarta Sans', sans-serif; margin-bottom: 6px; }
         .ride-meta.meta-closed { color: #B71C1C; font-weight: bold; }
         .controls-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }
-        .btn-sm { font-size: 9px; font-family: monospace; padding: 2px 8px; border-radius: 10px; text-transform: uppercase; font-weight: bold; border: 1px solid #BDBDBD; background: #F5F5F5; color: #1A1A1A; cursor: pointer; }
-        .rd-btn { font-size: 9px; font-family: monospace; padding: 3px 10px; border-radius: 10px; text-transform: uppercase; font-weight: bold; border: 1.5px solid #C8C0B6; background: #F0EBE3; color: #1A1A1A; cursor: pointer; white-space: nowrap; transition: all 0.15s; }
+        .btn-sm { font-size: 9px; font-family: 'Plus Jakarta Sans', sans-serif; padding: 2px 8px; border-radius: 10px; text-transform: uppercase; font-weight: bold; border: 1px solid #BDBDBD; background: #F5F5F5; color: #1A1A1A; cursor: pointer; }
+        .rd-btn { font-size: 9px; font-family: 'Plus Jakarta Sans', sans-serif; padding: 3px 10px; border-radius: 10px; text-transform: uppercase; font-weight: bold; border: 1.5px solid #C8C0B6; background: #F0EBE3; color: #1A1A1A; cursor: pointer; white-space: nowrap; }
         .rd-btn.on { background: #1A6B4A; border-color: #1A6B4A; color: #FFF; }
-        .score-badge { font-size: 11px; font-family: monospace; font-weight: bold; padding: 2px 7px; border-radius: 10px; flex-shrink: 0; }
+        .score-badge { font-size: 11px; font-family: 'Plus Jakarta Sans', sans-serif; font-weight: bold; padding: 2px 7px; border-radius: 10px; flex-shrink: 0; }
         .score-hi { background: #E8F5E9; color: #1B5E20; }
         .score-md { background: #E3F2FD; color: #0D47A1; }
         .score-lo { background: #F5F5F5; color: #424242; }
         .score-ng { background: #FFEBEE; color: #B71C1C; }
         .prog { height: 3px; background: #EDE8E1; border-radius: 2px; margin-top: 4px; }
-        .prog-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
+        .prog-fill { height: 100%; border-radius: 2px; }
         .prefs { padding: 10px 16px 6px; border-bottom: 1px solid #F5F0EA; }
         .prefs.section-closed { opacity: 0.4; pointer-events: none; background: #EEECEA; }
         .fam-blk { margin-bottom: 8px; }
-        .fam-lbl { font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: #AAA; font-family: monospace; margin-bottom: 6px; }
+        .fam-lbl { font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: #AAA; font-family: 'Plus Jakarta Sans', sans-serif; margin-bottom: 6px; }
         .p-row { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
-        .p-lbl { font-size: 11px; font-family: monospace; color: #1A1A1A; width: 18px; flex-shrink: 0; font-weight: bold; position: relative; }
+        .p-lbl { font-size: 11px; font-family: 'Plus Jakarta Sans', sans-serif; color: #1A1A1A; width: 18px; flex-shrink: 0; font-weight: bold; }
         .sync-dot { font-size: 10px; color: #2C5F8A; margin-left: 1px; }
         .pref-btns { display: flex; gap: 3px; flex: 1; }
-        .pb { flex: 1; padding: 6px 2px; border-radius: 6px; border: 1.5px solid #C8C0B6; background: #F0EBE3; font-size: 8px; font-family: monospace; cursor: pointer; color: #1A1A1A; text-align: center; white-space: nowrap; font-weight: bold; transition: all 0.12s; }
+        .pb { flex: 1; padding: 6px 2px; border-radius: 6px; border: 1.5px solid #C8C0B6; background: #F0EBE3; font-size: 8px; font-family: 'Plus Jakarta Sans', sans-serif; cursor: pointer; color: #1A1A1A; text-align: center; white-space: nowrap; font-weight: bold; }
         .pb:hover:not(:disabled) { border-color: #999; background: #E5DED5; }
         .pb:disabled { opacity: 0.6; cursor: wait; }
         .pb.sel-must    { background: #1A6B4A !important; border-color: #1A6B4A !important; color: #FFF !important; }
@@ -791,43 +1119,67 @@ export default function App() {
         .notes-sec.section-closed { opacity: 0.4; pointer-events: none; background: #EEECEA; }
         .notes-inp { width: 100%; border: 1.5px solid #D0CBC2; border-radius: 8px; padding: 7px 10px; font-size: 12px; font-family: Georgia, serif; color: #1A1A1A; resize: none; background: #FBF7F2; min-height: 44px; }
         .notes-inp:focus { outline: none; border-color: #AAA; }
-        .rank-sec { margin-top: 24px; background: #FFF; border-radius: 14px; border: 1px solid #EDE8E1; overflow: hidden; }
+        .rank-sec { margin-top: 24px; background: #FFF; border-radius: 14px; border: 1px solid #EDE8E1; }
         .rank-hdr { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; cursor: pointer; border-bottom: 1px solid #F5F0EA; }
         .rank-title { font-size: 14px; color: #1A1A1A; font-family: Georgia, serif; }
         .chev { font-size: 11px; color: #AAA; transition: transform 0.2s; display: inline-block; }
         .chev.open { transform: rotate(180deg); }
         .tog-row { display: flex; gap: 6px; padding: 10px 16px; border-bottom: 1px solid #F5F0EA; }
-        .tog-btn { flex: 1; padding: 6px; border-radius: 20px; border: 1.5px solid #C8C0B6; background: #F0EBE3; font-size: 10px; font-family: monospace; color: #1A1A1A; cursor: pointer; text-align: center; font-weight: bold; transition: all 0.12s; }
-        .rank-body { padding: 10px 16px 12px; }
-        .tier-lbl { font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: #AAA; font-family: monospace; margin: 12px 0 6px; }
-        .tier-lbl:first-child { margin-top: 0; }
-        .r-item { display: flex; align-items: center; gap: 6px; padding: 8px 12px; background: #FAFAF8; border-radius: 10px; border: 1px solid #EDE8E1; margin-bottom: 5px; }
+        .tog-btn { flex: 1; padding: 6px; border-radius: 20px; border: 1.5px solid #C8C0B6; background: #F0EBE3; font-size: 10px; font-family: 'Plus Jakarta Sans', sans-serif; color: #1A1A1A; cursor: pointer; text-align: center; font-weight: bold; }
+        .rank-body { padding: 10px 16px 12px; position: relative; }
+        .tier-lbl { font-size: 11px; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; color: #555; font-family: 'Plus Jakarta Sans', sans-serif; line-height: 1.4; }
+        .tier-lbl-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; border-radius: 8px; margin: 10px 0 6px; background: #F0EBE3; }
+        .tier-lbl-row:first-child { margin-top: 0; }
+        .tier-lbl-row.complete { background: #F1F8F4; }
+        .tier-lbl-row.incomplete { background: #FFF8E1; }
+        .tier-lbl-row.neutral { background: #F0EBE3; }
+        .r-item { background: #FAFAF8; border-radius: 10px; border: 1px solid #EDE8E1; margin-bottom: 5px; padding: 8px 12px; }
         .r-item.r-skipped { background: #F5F3F0; border-color: #E8E3DC; opacity: 0.65; }
-        .r-num  { font-size: 10px; font-family: monospace; color: #CCC; width: 14px; flex-shrink: 0; }
+        .r-item-top { display: flex; align-items: center; gap: 6px; }
+        .r-item-meta { display: flex; flex-wrap: nowrap; gap: 4px; margin-top: 4px; padding-left: 4px; }
+        .r-meta-badge { font-size: 9px; font-family: 'Plus Jakarta Sans', sans-serif; font-weight: bold; padding: 1px 7px; border-radius: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .r-meta-badge-ll { flex: 0 0 auto; }
+        .r-meta-badge-sb { flex: 1; }
+        .r-num  { font-size: 10px; font-family: 'Plus Jakarta Sans', sans-serif; color: #CCC; width: 14px; flex-shrink: 0; }
         .r-name { flex: 1; font-size: 12px; color: #1A1A1A; line-height: 1.3; }
-        .r-name-skip { text-decoration: line-through; color: #AAA; }
-        .ill-price { font-size: 9px; color: #BF360C; margin-left: 4px; font-family: monospace; }
-        .sellout-badge { display: inline-block; font-size: 8px; font-family: monospace; font-weight: bold; padding: 1px 5px; border-radius: 8px; margin-left: 4px; white-space: nowrap; }
-        .r-pill { font-size: 9px; font-family: monospace; padding: 1px 5px; border-radius: 8px; font-weight: bold; flex-shrink: 0; pointer-events: none; }
+        .r-link { color: #1A1A1A; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 2px; }
+        .r-name-skip .r-link { text-decoration: line-through; color: #AAA; }
+        .ill-price { font-size: 9px; color: #BF360C; margin-left: 4px; font-family: 'Plus Jakarta Sans', sans-serif; }
+        .r-pill { font-size: 9px; font-family: 'Plus Jakarta Sans', sans-serif; padding: 1px 5px; border-radius: 8px; font-weight: bold; flex-shrink: 0; pointer-events: none; }
         .b-ill  { background: #FFF3E0; color: #BF360C; border: 1px solid #FFCC80; }
         .b-mp1  { background: #E8F5E9; color: #1B5E20; border: 1px solid #A5D6A7; }
         .b-mp2  { background: #E3F2FD; color: #0D47A1; border: 1px solid #90CAF9; }
-        .rd-tag { background: #F1F8F4; color: #1A6B4A; border: 1px solid #A5D6A7; }
-        .ll-tag { background: #FFF3E0; color: #BF360C; border: 1px solid #FFCC80; }
-        .rd-chk { width: 20px; height: 20px; border-radius: 5px; border: 1.5px solid #C8C0B6; background: #FFF; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 11px; transition: all 0.12s; }
+        .rd-tag   { background: #F1F8F4; color: #1A6B4A; border: 1px solid #A5D6A7; }
+        .ee-tag   { background: #E3F2FD; color: #0D47A1; border: 1px solid #90CAF9; }
+        .visa-tag { background: #F3E5F5; color: #6A1B9A; border: 1px solid #CE93D8; }
+        .ll-tag   { background: #FFF3E0; color: #BF360C; border: 1px solid #FFCC80; }
+        .rd-chk { width: 20px; height: 20px; border-radius: 5px; border: 1.5px solid #C8C0B6; background: #FFF; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 11px; }
         .rd-chk.on { background: #1A6B4A; border-color: #1A6B4A; color: #FFF; }
-        .conflict { background: #FFF8E1; border: 1px solid #FFE082; border-radius: 8px; padding: 8px 12px; margin-bottom: 8px; font-size: 11px; color: #E65100; font-family: monospace; line-height: 1.5; }
-        .rd-pend  { background: #F1F8F4; border: 1px solid #A5D6A7; border-radius: 8px; padding: 7px 10px; margin-bottom: 6px; font-size: 11px; color: #2E7D32; font-family: monospace; }
-        .ll-menu-btn { font-size: 9px; font-family: monospace; font-weight: bold; padding: 3px 8px; border-radius: 10px; border: 1.5px solid #C8C0B6; background: #F0EBE3; color: #1A1A1A; cursor: pointer; white-space: nowrap; transition: all 0.12s; }
-        .ll-menu-btn:hover { border-color: #999; }
-        .ll-menu-popup { position: absolute; right: 0; top: 28px; background: #FFF; border: 1px solid #EDE8E1; border-radius: 10px; overflow: hidden; width: 140px; z-index: 100; box-shadow: 0 4px 16px rgba(0,0,0,0.10); }
-        .ll-menu-item { padding: 8px 12px; font-size: 11px; font-family: monospace; color: #1A1A1A; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+        .conflict { background: #FFF8E1; border: 1px solid #FFE082; border-radius: 8px; padding: 8px 12px; margin-bottom: 8px; font-size: 11px; color: #E65100; font-family: 'Plus Jakarta Sans', sans-serif; }
+        .rd-pend  { background: #F1F8F4; border: 1px solid #A5D6A7; border-radius: 8px; padding: 7px 10px; margin-bottom: 6px; font-size: 11px; color: #2E7D32; font-family: 'Plus Jakarta Sans', sans-serif; }
+        .ll-menu-btn { font-size: 9px; font-family: 'Plus Jakarta Sans', sans-serif; font-weight: bold; padding: 3px 8px; border-radius: 10px; border: 1.5px solid #C8C0B6; background: #F0EBE3; color: #1A1A1A; cursor: pointer; white-space: nowrap; }
+        .ll-menu-popup { position: absolute; right: 0; background: #FFF; border: 1px solid #EDE8E1; border-radius: 10px; overflow: hidden; width: 145px; z-index: 1000; box-shadow: 0 4px 16px rgba(0,0,0,0.15); }
+        .ll-menu-item { padding: 8px 12px; font-size: 11px; font-family: 'Plus Jakarta Sans', sans-serif; color: #1A1A1A; cursor: pointer; display: flex; align-items: center; gap: 8px; }
         .ll-menu-item:hover { background: #F5F2EE; }
         .ll-menu-item.ll-menu-disabled { opacity: 0.35; cursor: not-allowed; }
         .ll-menu-item.ll-menu-active { background: #F1F8F4; }
         .ll-menu-item.ll-menu-clear { border-top: 1px solid #EDE8E1; color: #AAA; }
         .ll-menu-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-        .ll-menu-check { margin-left: auto; color: #1A6B4A; font-size: 11px; }
+        .ll-menu-check { margin-left: auto; color: #1A6B4A; }
+        .summary-park { background: #FFF; border-radius: 14px; border: 1px solid #EDE8E1; margin-bottom: 10px; overflow: hidden; }
+        .summary-park-hdr { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; cursor: pointer; border-bottom: 1px solid #F5F0EA; }
+        .summary-park-name { font-size: 14px; font-family: Georgia, serif; }
+        .summary-body { padding: 10px 16px 12px; }
+        .summary-empty { font-size: 12px; color: #AAA; font-family: 'Plus Jakarta Sans', sans-serif; }
+        .summary-section-lbl { font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: #AAA; font-family: 'Plus Jakarta Sans', sans-serif; margin: 10px 0 4px; }
+        .summary-item { padding: 8px 0; border-bottom: 1px solid #F5F0EA; }
+        .summary-item:last-child { border-bottom: none; }
+        .summary-item-top { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 4px; }
+        .summary-badge { font-size: 9px; font-family: 'Plus Jakarta Sans', sans-serif; font-weight: bold; padding: 2px 7px; border-radius: 8px; white-space: nowrap; flex-shrink: 0; margin-top: 1px; }
+        .summary-ride-info { flex: 1; }
+        .summary-ride-name { font-size: 13px; color: #1A1A1A; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 2px; display: block; line-height: 1.3; }
+        .summary-ll-type { font-size: 9px; color: #AAA; font-family: 'Plus Jakarta Sans', sans-serif; }
+        .summary-meta-row { display: flex; flex-wrap: nowrap; gap: 4px; margin-top: 4px; }
       `}</style>
       <div className="app">
         <div className="header">
@@ -837,16 +1189,17 @@ export default function App() {
         {loading && <div className="sync-status sync-loading">Loading votes from server…</div>}
         {syncError && <div className="sync-status sync-error">{syncError}</div>}
         <div className="park-tabs">
-          {PARKS.map((p) => (
-            <button key={p.id} className={`park-tab ${p.id === activePark ? "active" : "inactive"}`} style={p.id === activePark ? { background: p.color } : {}} onClick={() => setActivePark(p.id)}>
-              {p.name}
+          {TABS.map((t) => (
+            <button key={t.id} className={`park-tab ${t.id === activeTab ? "active" : "inactive"}`} style={t.id === activeTab ? { background: t.color } : {}} onClick={() => setActiveTab(t.id)}>
+              {t.name}
             </button>
           ))}
         </div>
-        {parkRides.map((ride) => (
-          <RideCard key={ride.id} ride={ride} prefs={prefs} onPref={handlePref} onNotes={handleNotes} onClosed={handleClosed} onRdNom={handleRdNom} syncing={syncing} />
-        ))}
-        <Rankings parkId={activePark} prefs={prefs} onRdConfirm={handleRdConfirm} onLLStatus={handleLLStatus} />
+        {activeTab === "summary" ? (
+          <Summary prefs={prefs} />
+        ) : (
+          <ParkRides parkId={activeTab} prefs={prefs} onPref={handlePref} onNotes={handleNotes} onClosed={handleClosed} onRdNom={handleRdNom} syncing={syncing} onRdConfirm={handleRdConfirm} onLLStatus={handleLLStatus} />
+        )}
       </div>
     </>
   );
