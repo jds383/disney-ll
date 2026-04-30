@@ -296,7 +296,7 @@ async function fetchAllVotes() {
       const closed      = page.properties["Closed"]?.checkbox ?? false;
       const rdNom       = page.properties["Rope Drop Nominee"]?.checkbox ?? false;
       const rdConfirmed = page.properties["Rope Drop Confirmed"]?.checkbox ?? false;
-      const llStatus    = page.properties["LL Status"]?.select?.name ?? null;
+      const llStatus    = (page.properties["LL Status"]?.select?.name ?? null)?.replace(/[\u2018\u2019\u201A\u201B]/g, "'") ?? null;
       const notes       = page.properties["Notes"]?.rich_text?.[0]?.text?.content ?? "";
       const park        = RIDES.find((r) => r.id === rideId)?.park;
       if (!rideId) return;
@@ -810,7 +810,18 @@ function Rankings({ parkId, prefs, onRdConfirm, onLLStatus }) {
             <div className="tier-lbl-row neutral">
               <span className="tier-lbl">Later Round Options</span>
             </div>
-            {(() => { let num = 0; return laterRound.map((r) => { num++; return renderRideItem(r, num); }); })()}
+            {(() => {
+              const sorted = [
+                ...laterRound.filter((r) => prefs[r.id]?.llStatus !== LL_STATUS.DONTBOOK),
+                ...laterRound.filter((r) => prefs[r.id]?.llStatus === LL_STATUS.DONTBOOK),
+              ];
+              let num = 0;
+              return sorted.map((r) => {
+                const isDemoted = prefs[r.id]?.llStatus === LL_STATUS.DONTBOOK;
+                if (!isDemoted) num++;
+                return renderRideItem(r, isDemoted ? null : num);
+              });
+            })()}
           </div>
         )}
       </>
