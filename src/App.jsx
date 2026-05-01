@@ -52,6 +52,8 @@ function llText(ll, illPrice) {
   return "No Lightning Lane";
 }
 
+// ── Sellout & Standby Data ────────────────────────────────────────────────────
+
 const SELLOUT = {
   mk1:   { time: "~8:09 AM",  urgency: "red"   },
   mk10:  { time: "~8:56 AM",  urgency: "red"   },
@@ -157,10 +159,15 @@ const DIFF_COLOR = {
   green: { bg: "#E8F5E9", color: "#1B5E20", border: "#A5D6A7" },
 };
 
+// ── Early Entry Data ──────────────────────────────────────────────────────────
+
 const EARLY_ENTRY = new Set([
+  // Magic Kingdom
   "mk3", "mk12", "mk12b", "mk7b", "mk6", "mk2", "mk5", "mk1", "mk11",
   "mk30", "mk8", "mk16", "mk15", "mk4", "mk14",
+  // EPCOT
   "ep10", "ep1", "ep3", "ep11", "ep5", "ep4", "ep2", "ep7",
+  // Hollywood Studios
   "hs7b", "hs11", "hs2", "hs6", "hs3", "hs9", "hs1", "hs7", "hs4",
 ]);
 
@@ -246,6 +253,8 @@ const RIDES = RAW_RIDES
   .map((r) => ({ ...r, displayName: toDisplayName(r.name) }))
   .sort((a, b) => sortKey(a.displayName).localeCompare(sortKey(b.displayName)));
 
+// ── Storage ───────────────────────────────────────────────────────────────────
+
 const LS_KEY = "dw2026-ll-v8";
 function loadStorage() {
   try { const r = localStorage.getItem(LS_KEY); return r ? JSON.parse(r) : {}; } catch (_) { return {}; }
@@ -253,6 +262,8 @@ function loadStorage() {
 function saveStorage(data) {
   try { localStorage.setItem(LS_KEY, JSON.stringify(data)); } catch (_) {}
 }
+
+// ── Notion API ────────────────────────────────────────────────────────────────
 
 async function fetchAllVotes() {
   const parks = ["mk", "ep", "hs"];
@@ -337,6 +348,8 @@ async function saveMetaToNotion(rideId, rideName, park, meta, rdConfirmedId) {
   } catch (e) { console.error("Meta sync failed:", e); }
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
 function calcScore(rideId, prefs) {
   return PEOPLE.reduce((sum, p) => {
     const pf = prefs[rideId]?.prefs?.[p.id];
@@ -373,6 +386,8 @@ function isPreBookFull(parkId, prefs) {
   return t1 >= 1 && t2 >= maxT2 || t2 >= 3;
 }
 
+// ── Sort group for LL ranking ─────────────────────────────────────────────────
+
 function sortTierGroup(group, parkId, prefs) {
   const full = isPreBookFull(parkId, prefs);
   const prebooked = (r) => prefs[r.id]?.llStatus === LL_STATUS.FIRST || prefs[r.id]?.llStatus === LL_STATUS.PREBOOK;
@@ -399,6 +414,8 @@ function sortTierGroup(group, parkId, prefs) {
     ];
   }
 }
+
+// ── RideCard ──────────────────────────────────────────────────────────────────
 
 function RideCard({ ride, prefs, onPref, onNotes, onClosed, onRdNom, syncing }) {
   const score  = calcScore(ride.id, prefs);
@@ -461,6 +478,8 @@ function RideCard({ ride, prefs, onPref, onNotes, onClosed, onRdNom, syncing }) 
     </div>
   );
 }
+
+// ── LL Status Menu ────────────────────────────────────────────────────────────
 
 function LLStatusMenu({ ride, prefs, parkId, onLLStatus }) {
   const [open, setOpen] = useState(false);
@@ -526,6 +545,8 @@ function LLStatusMenu({ ride, prefs, parkId, onLLStatus }) {
   );
 }
 
+// ── Rank Item ─────────────────────────────────────────────────────────────────
+
 function RankItem({ r, num, prefs, parkId, onLLStatus }) {
   const llStatus  = prefs[r.id]?.llStatus ?? null;
   const isDemoted = llStatus === LL_STATUS.DONTBOOK;
@@ -576,6 +597,8 @@ function RankItem({ r, num, prefs, parkId, onLLStatus }) {
   );
 }
 
+// ── Rankings ──────────────────────────────────────────────────────────────────
+
 function Rankings({ parkId, prefs, onRdConfirm, onLLStatus }) {
   const park        = PARKS.find((p) => p.id === parkId);
   const rides       = RIDES.filter((r) => r.park === parkId);
@@ -585,12 +608,14 @@ function Rankings({ parkId, prefs, onRdConfirm, onLLStatus }) {
   if (scored.length === 0) return null;
 
   const anyLLSelected = rides.some((r) => prefs[r.id]?.llStatus);
-  const [overallOpen, setOverallOpen] = useState(!anyLLSelected);
-  const [llOpen, setLlOpen]           = useState(anyLLSelected);
+  const [overallOpen, setOverallOpen]     = useState(!anyLLSelected);
+  const [llOpen, setLlOpen]               = useState(anyLLSelected);
+
 
   const rdConfirmed  = prefs[`rdc_${parkId}`] ?? null;
   const rdNominees   = activeRides.filter((r) => prefs[r.id]?.rdNom);
   const multiPending = rdNominees.length > 1 && !rdConfirmed;
+  const tier1Conflict = activeRides.filter((r) => r.ll === "mp1" && r.id !== rdConfirmed && PEOPLE.some((p) => prefs[r.id]?.prefs?.[p.id] === "must"));
 
   const renderOverall = () => {
     const nonDecided = activeRides.filter((r) => prefs[r.id]?.llStatus !== LL_STATUS.DONTBOOK && prefs[r.id]?.llStatus !== LL_STATUS.LATER && r.id !== rdConfirmed);
@@ -638,7 +663,9 @@ function Rankings({ parkId, prefs, onRdConfirm, onLLStatus }) {
     if (t2Filled) {
       activeRides.filter((r) => r.ll === "mp2" && prefs[r.id]?.llStatus !== LL_STATUS.FIRST && prefs[r.id]?.llStatus !== LL_STATUS.PREBOOK).forEach((r) => laterRoundIds.add(r.id));
     }
-    // 2nd Round rides always appear in Later Round Options
+    // 2nd Round selections always move to Later Round Options
+    activeRides.filter((r) => prefs[r.id]?.llStatus === LL_STATUS.SECOND).forEach((r) => laterRoundIds.add(r.id));
+    // 2nd Round rides always move to Later Round Options
     activeRides.filter((r) => prefs[r.id]?.llStatus === LL_STATUS.SECOND).forEach((r) => laterRoundIds.add(r.id));
 
     const rdHeader = () => {
@@ -704,7 +731,7 @@ function Rankings({ parkId, prefs, onRdConfirm, onLLStatus }) {
         {(() => {
           const t1Rides = allLLScored.filter((r) => r.ll === "mp1" && !laterRoundIds.has(r.id));
           if (!t1Rides.length) return null;
-          const locked  = !!t1PreBooked;
+          const locked = !!t1PreBooked;
           const sorted  = sortTierGroup(t1Rides, parkId, prefs);
           const display = locked
             ? t1Rides.filter((r) => r.id === t1PreBooked.id)
@@ -788,8 +815,7 @@ function Rankings({ parkId, prefs, onRdConfirm, onLLStatus }) {
             </div>
             {(() => {
               const sorted = [
-                ...laterRound.filter((r) => prefs[r.id]?.llStatus === LL_STATUS.SECOND),
-                ...laterRound.filter((r) => prefs[r.id]?.llStatus !== LL_STATUS.SECOND && prefs[r.id]?.llStatus !== LL_STATUS.DONTBOOK),
+                ...laterRound.filter((r) => prefs[r.id]?.llStatus !== LL_STATUS.DONTBOOK),
                 ...laterRound.filter((r) => prefs[r.id]?.llStatus === LL_STATUS.DONTBOOK),
               ];
               let num = 0;
@@ -824,6 +850,8 @@ function Rankings({ parkId, prefs, onRdConfirm, onLLStatus }) {
     </>
   );
 }
+
+// ── Summary ───────────────────────────────────────────────────────────────────
 
 function Summary({ prefs }) {
   const [collapsed, setCollapsed] = useState({});
@@ -896,6 +924,8 @@ function Summary({ prefs }) {
   );
 }
 
+// ── ParkRides ─────────────────────────────────────────────────────────────────
+
 function ParkRides({ parkId, prefs, onPref, onNotes, onClosed, onRdNom, syncing, onRdConfirm, onLLStatus }) {
   const [ratedOpen, setRatedOpen] = useState(false);
 
@@ -930,6 +960,8 @@ function ParkRides({ parkId, prefs, onPref, onNotes, onClosed, onRdNom, syncing,
     </>
   );
 }
+
+// ── App ───────────────────────────────────────────────────────────────────────
 
 export default function App() {
   const [activeTab, setActiveTab] = useState("mk");
@@ -1105,6 +1137,8 @@ export default function App() {
         .rank-title { font-size: 14px; color: #1A1A1A; font-family: Georgia, serif; }
         .chev { font-size: 11px; color: #AAA; transition: transform 0.2s; display: inline-block; }
         .chev.open { transform: rotate(180deg); }
+        .tog-row { display: flex; gap: 6px; padding: 10px 16px; border-bottom: 1px solid #F5F0EA; }
+        .tog-btn { flex: 1; padding: 6px; border-radius: 20px; border: 1.5px solid #C8C0B6; background: #F0EBE3; font-size: 10px; font-family: 'Plus Jakarta Sans', sans-serif; color: #1A1A1A; cursor: pointer; text-align: center; font-weight: bold; }
         .rank-body { padding: 10px 16px 12px; position: relative; }
         .tier-lbl { font-size: 11px; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; color: #555; font-family: 'Plus Jakarta Sans', sans-serif; line-height: 1.4; }
         .tier-lbl-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; border-radius: 8px; margin: 10px 0 6px; background: #F0EBE3; }
@@ -1113,7 +1147,12 @@ export default function App() {
         .tier-lbl-row.incomplete { background: #FFF8E1; }
         .tier-lbl-row.neutral { background: #F0EBE3; }
         .r-item { background: #FAFAF8; border-radius: 10px; border: 1px solid #EDE8E1; margin-bottom: 5px; padding: 8px 12px; }
-        .r-item.r-skipped { background: #F5F3F0; border-color: #E8E3DC; opacity: 0.65; }
+        .r-item.r-skipped { background: #F5F3F0; border-color: #E8E3DC; }
+        .r-item.r-skipped .r-num,
+        .r-item.r-skipped .score-badge,
+        .r-item.r-skipped .r-name { opacity: 0.65; }
+        .r-item { position: relative; z-index: 0; }
+        .r-item:has(.ll-menu-popup) { z-index: 100; }
         .r-item-top { display: flex; align-items: center; gap: 6px; }
         .r-item-meta { display: flex; flex-wrap: nowrap; gap: 4px; margin-top: 4px; padding-left: 4px; }
         .r-meta-badge { font-size: 9px; font-family: 'Plus Jakarta Sans', sans-serif; font-weight: bold; padding: 1px 7px; border-radius: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
