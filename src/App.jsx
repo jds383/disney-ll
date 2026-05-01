@@ -863,17 +863,12 @@ function Summary({ prefs }) {
     <div>
       {PARKS.map((park) => {
         const rides    = RIDES.filter((r) => r.park === park.id);
-        const rdConf   = prefs[`rdc_${park.id}`] ?? null;
-        const rdRide   = rdConf ? rides.find((r) => r.id === rdConf) : null;
         const firstLL  = rides.find((r) => prefs[r.id]?.llStatus === LL_STATUS.FIRST);
         const preBooks = rides.filter((r) => prefs[r.id]?.llStatus === LL_STATUS.PREBOOK)
           .map((r) => ({ ...r, score: calcScore(r.id, prefs) }))
           .sort((a, b) => b.score - a.score);
-        const secondRound = rides.filter((r) => prefs[r.id]?.llStatus === LL_STATUS.SECOND)
-          .map((r) => ({ ...r, score: calcScore(r.id, prefs) }))
-          .sort((a, b) => b.score - a.score);
-
-        const hasAnything = rdRide || firstLL || preBooks.length > 0 || secondRound.length > 0;
+        const hasAnything = firstLL || preBooks.length > 0;
+        if (!hasAnything) return null;
         const isCollapsed = collapsed[park.id];
 
         const SummaryRideItem = ({ badge, badgeBg, badgeColor, badgeBorder, r }) => {
@@ -908,16 +903,8 @@ function Summary({ prefs }) {
             </div>
             {!isCollapsed && (
               <div className="summary-body">
-                {!hasAnything && <div className="summary-empty">No selections yet</div>}
-                {rdRide && <SummaryRideItem badge="🏃 Rope Drop" badgeBg="#F1F8F4" badgeColor="#1A6B4A" badgeBorder="#A5D6A7" r={rdRide} />}
-                {firstLL && <SummaryRideItem badge="1st LL" badgeBg="#E8F5E9" badgeColor="#0A4A2E" badgeBorder="#A5D6A7" r={firstLL} />}
+                {firstLL && <SummaryRideItem badge="Pre-Book (1st)" badgeBg="#E8F5E9" badgeColor="#0A4A2E" badgeBorder="#A5D6A7" r={firstLL} />}
                 {preBooks.map((r, i) => <SummaryRideItem key={r.id} badge={`Pre-Book ${i + 1}`} badgeBg="#F1F8F4" badgeColor="#1A6B4A" badgeBorder="#A5D6A7" r={r} />)}
-                {secondRound.length > 0 && (
-                  <>
-                    <div className="summary-section-lbl">2nd Round — book after first tap-in</div>
-                    {secondRound.map((r, i) => <SummaryRideItem key={r.id} badge={`2nd Round ${i + 1}`} badgeBg="#FFFDE7" badgeColor="#B8860B" badgeBorder="#FFE082" r={r} />)}
-                  </>
-                )}
               </div>
             )}
           </div>
@@ -1075,7 +1062,7 @@ export default function App() {
     });
   }, []);
 
-  const TABS = [...PARKS, { id: "summary", name: "Summary", color: "#555" }];
+  const TABS = [...PARKS, { id: "summary", name: "Pre-Book", color: "#555" }];
 
   return (
     <>
