@@ -814,9 +814,12 @@ function Rankings({ parkId, prefs, onRdConfirm, onLLStatus }) {
               <span className="tier-lbl">Later Round Options</span>
             </div>
             {(() => {
+              const byScore = (a, b) => b.score - a.score;
               const sorted = [
-                ...laterRound.filter((r) => prefs[r.id]?.llStatus !== LL_STATUS.DONTBOOK),
-                ...laterRound.filter((r) => prefs[r.id]?.llStatus === LL_STATUS.DONTBOOK),
+                ...laterRound.filter((r) => prefs[r.id]?.llStatus === LL_STATUS.SECOND).sort(byScore),
+                ...laterRound.filter((r) => prefs[r.id]?.llStatus === LL_STATUS.LATER).sort(byScore),
+                ...laterRound.filter((r) => !prefs[r.id]?.llStatus).sort(byScore),
+                ...laterRound.filter((r) => prefs[r.id]?.llStatus === LL_STATUS.DONTBOOK).sort(byScore),
               ];
               let num = 0;
               return sorted.map((r) => {
