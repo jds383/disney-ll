@@ -727,6 +727,26 @@ function Rankings({ parkId, prefs, onRdConfirm, onLLStatus }) {
           <div className="conflict">⚠ Rope Drop ride is not available during early entry — you'll be competing with the full crowd at park open.</div>
         )}
 
+        {/* Single Pass */}
+        {(() => {
+          const illRides = allLLScored.filter((r) => r.ll === "ill" && !laterRoundIds.has(r.id));
+          if (!illRides.length) return null;
+          let num = 0;
+          return (
+            <div>
+              {(() => {
+                const illAllMarked = illRides.every((r) => prefs[r.id]?.llStatus);
+                return (
+                  <div className={`tier-lbl-row ${illAllMarked ? "complete" : "neutral"}`}>
+                    <span className="tier-lbl">Lightning Lane Single Pass</span>
+                  </div>
+                );
+              })()}
+              {illRides.map((r) => { num++; return renderRideItem(r, num); })}
+            </div>
+          );
+        })()}
+
         {/* Tier 1 */}
         {(() => {
           const t1Rides = allLLScored.filter((r) => r.ll === "mp1" && !laterRoundIds.has(r.id));
@@ -783,26 +803,6 @@ function Rankings({ parkId, prefs, onRdConfirm, onLLStatus }) {
                 if (!isDemoted) num++;
                 return renderRideItem(r, isDemoted ? null : num);
               })}
-            </div>
-          );
-        })()}
-
-        {/* Single Pass */}
-        {(() => {
-          const illRides = allLLScored.filter((r) => r.ll === "ill" && !laterRoundIds.has(r.id));
-          if (!illRides.length) return null;
-          let num = 0;
-          return (
-            <div>
-              {(() => {
-                const illAllMarked = illRides.every((r) => prefs[r.id]?.llStatus);
-                return (
-                  <div className={`tier-lbl-row ${illAllMarked ? "complete" : "neutral"}`}>
-                    <span className="tier-lbl">Lightning Lane Single Pass</span>
-                  </div>
-                );
-              })()}
-              {illRides.map((r) => { num++; return renderRideItem(r, num); })}
             </div>
           );
         })()}
